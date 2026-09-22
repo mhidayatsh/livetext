@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Shareli Blog — Learn to share files without Google Drive, transfer text phone to laptop, send encrypted messages, and protect your online privacy." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://shareli.online/blog.html" />
+    <meta property="og:title" content="Shareli Blog — Share Files, Transfer Text & Stay Private Online" />
+    <meta property="og:description" content="Tips and guides on sharing files without cloud storage, transferring text between devices, and using encrypted messaging for free." />
+    <meta property="og:url" content="https://shareli.online/blog.html" />
+    <meta property="og:type" content="website" />
+    <title>Blog — How to Share Files & Text Securely Without Account | Shareli</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/favicon-192.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      .page-wrap { max-width: 780px; margin: 0 auto; padding: 48px 24px 80px; }
+      .page-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 48px; font-size: 0.9rem; }
+      .page-nav a { color: var(--muted); text-decoration: none; display: flex; align-items: center; gap: 8px; }
+      .page-nav a:hover { color: var(--ink); }
+      .page-hero { margin-bottom: 48px; }
+      .page-hero h1 { font-size: clamp(1.8rem, 5vw, 2.4rem); font-weight: 800; line-height: 1.2; margin-bottom: 14px; color: var(--ink); }
+      .page-hero p { font-size: 1.05rem; line-height: 1.7; color: var(--muted); }
+      .post-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 28px 32px; margin-bottom: 20px; transition: border-color 0.2s, transform 0.2s; display: block; text-decoration: none; }
+      .post-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+      .post-meta { font-size: 0.8rem; color: var(--muted); margin-bottom: 10px; display: flex; gap: 12px; flex-wrap: wrap; }
+      .post-tag { background: var(--accent-soft); color: var(--accent-strong); border-radius: 6px; padding: 2px 8px; font-weight: 500; }
+      .post-card h2 { font-size: 1.2rem; font-weight: 700; color: var(--ink); margin: 0 0 10px; line-height: 1.35; }
+      .post-card p { line-height: 1.7; color: var(--muted); margin: 0; font-size: 0.93rem; }
+      .read-more { display: inline-block; margin-top: 14px; color: var(--accent); font-weight: 600; font-size: 0.88rem; }
+      .section-title { font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 40px 0 16px; }
+      .page-footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 16px; font-size: 0.8rem; }
+      .page-footer a { color: var(--muted); text-decoration: none; }
+      .page-footer a:hover { color: var(--ink); }
+    </style>
+      <meta property="og:image" content="https://shareli.online/logo.jpg" />
+    <meta name="twitter:image" content="https://shareli.online/logo.jpg" />
+  </head>
+  <body>
+    <main class="page-wrap">
+      <nav class="page-nav">
+        <a href="/">
+          <img src="/logo.jpg" alt="Shareli" style="width:20px;height:20px;border-radius:4px;" />
+          ← Back to Shareli
+        </a>
+      </nav>
+
+      <div class="page-hero">
+        <h1>Shareli Blog</h1>
+        <p>Tips, guides, and insights on secure text sharing, online privacy, and building better workflows for developers and teams.</p>
+      </div>
+
+      <p class="section-title">Latest Articles</p>
+
+      <a class="post-card" href="/blog/encrypted-voice-notes.html">
+        <div class="post-meta">
+          <span>August 2026</span>
+          <span class="post-tag">Product Update</span>
+          <span class="post-tag">Features</span>
+        </div>
+        <h2>Introducing End-to-End Encrypted Voice Notes</h2>
+        <p>You can now record and send secure, self-destructing audio messages directly from your browser with zero data retention.</p>
+        <span class="read-more">Read article →</span>
+      </a>
+
+      <a class="post-card" href="/blog/instant-loading-50mb-support.html">
+        <div class="post-meta">
+          <span>August 2026</span>
+          <span class="post-tag">Update</span>
+          <span class="post-tag">Performance</span>
+        </div>
+        <h2>Instant Text Loading & 5MB File Support</h2>
+        <p>Shareli now streams room history. Read text instantly while massive files decrypt asynchronously in the background using our new Skeleton Loaders.</p>
+        <span class="read-more">Read article →</span>
+      </a>
+
+      <a class="post-card" href="/blog/password-protected-chat-rooms.html">
+        <div class="post-meta">
+          <span>August 2026</span>
+          <span class="post-tag">Features</span>
+          <span class="post-tag">Security</span>
+        </div>
+        <h2>How to Create a Password-Protected Chat Room on Shareli</h2>
+        <p>By default, private rooms use a random key. Now you can set a custom password to generate a zero-knowledge encryption key using PBKDF2.</p>
+        <span class="read-more">Read article →</span>
+      </a>
+
+      <a class="post-card" href="/blog/self-destructing-messages-explained.html">
+        <div class="post-meta">
+          <span>August 2026</span>
+          <span class="post-tag">Privacy</span>
+          <span class="post-tag">Security</span>
+        </div>
+        <h2>What Are Self-Destructing Messages? How They Work &amp; Why They Matter</h2>
+        <p>A self-destructing message permanently deletes itself after a set timer. Learn how they work technically, why they improve your privacy, and when to use them.</p>
+        <span class="read-more">Read article →</span>
+      </a>
+
+      <a class="post-card" href="/blog/share-code-snippets-online.html">
+        <div class="post-meta">
+          <span>August 2026</span>
+          <span class="post-tag">Developer</span>
+          <span class="post-tag">Code</span>
+        </div>
+        <h2>How to Share Code Snippets Online Instantly — Free &amp; Secure</h2>
+        <p>Shareli supports syntax highlighting for 190+ languages. Share code with a colleague in seconds — no GitHub account, no Pastebin, no permanent storage of your proprietary code.</p>
+        <span class="read-more">Read article →</span>
+      </a>
+
+      <a class="post-card" href="/blog/online-clipboard-sync-devices.html">
+        <div class="post-meta">
+          <span>August 2026</span>
+          <span class="post-tag">Clipboard</span>
+          <span class="post-tag">Productivity</span>
+        </div>
+        <h2>Best Free Online Clipboard to Sync Text Across All Your Devices</h2>
+        <p>Copy on your phone, paste on your laptop. Shareli works on any combination of devices — iPhone, Android, Windows, Mac — with no account and no permanent storage.</p>
+        <span class="read-more">Read article →</span>
+      </a>
+
+      <a class="post-card" href="/blog/share-files-without-google-drive.html">
+        <div class="post-meta">
+          <span>August 2026</span>
+          <span class="post-tag">File Sharing</span>
+          <span class="post-tag">Privacy</span>
+        </div>
+        <h2>How to Share Files Without Google Drive, Dropbox, or Email</h2>
+        <p>Google Drive is great for long-term storage. But for a quick private file transfer right now, it is overkill. Here is the fastest alternative that requires zero accounts.</p>
+        <span class="read-more">Read article →</span>
+      </a>
+
+      <a class="post-card" href="/blog/transfer-text-phone-to-laptop.html">
+        <div class="post-meta">
+          <span>August 2026</span>
+          <span class="post-tag">Guide</span>
+          <span class="post-tag">Tips</span>
+        </div>
+        <h2>How to Transfer Text from Phone to Laptop Instantly (No Cable Required)</h2>
+        <p>Email yourself? AirDrop? Those are all clunky. There is a faster way to get any text from your phone to your laptop in under 10 seconds — with no apps and no accounts.</p>
+        <span class="read-more">Read article →</span>
+      </a>
+
+      <footer class="page-footer">
+        <a href="/">Home</a>
+        <a href="/about.html">About</a>
+        <a href="/faq.html">FAQ</a>
+        <a href="/privacy.html">Privacy</a>
+        <a href="/terms.html">Terms</a>
+        <a href="/contact.html">Contact</a>
+        <a href="https://github.com/hidayashaikh86-tech/livetext" target="_blank" rel="noopener noreferrer">GitHub</a>
+      </footer>
+    </main>
+  </body>
+</html>

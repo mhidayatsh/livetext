@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="About Shareli — a free, open-source encrypted tool for sharing text, code, files content="About Shareli — a free, open-source encrypted tool for sharing text, code, files & voice notes between devices. No sign-up, no tracking, no data stored. Built for privacy." voice notes between devices without tracking. Built for privacy." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://shareli.online/about.html" />
+    <meta property="og:title" content="About Shareli — Free Encrypted Text & File Sharing Tool" />
+    <meta property="og:description" content="Learn about Shareli's mission: instant, private, open-source text and file sharing with end-to-end encryption. No account, no data retention." />
+    <meta property="og:url" content="https://shareli.online/about.html" />
+    <meta property="og:type" content="website" />
+    <title>About Shareli — Free Open-Source Encrypted Text & File Sharing Tool</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/favicon-192.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      .page-wrap { max-width: 780px; margin: 0 auto; padding: 48px 24px 80px; }
+      .page-nav { display: flex; align-items: center; gap: 10px; margin-bottom: 48px; font-size: 0.9rem; }
+      .page-nav a { color: var(--muted); text-decoration: none; display: flex; align-items: center; gap: 8px; transition: color 0.2s; }
+      .page-nav a:hover { color: var(--ink); }
+      .page-hero { margin-bottom: 56px; }
+      .page-hero h1 { font-size: clamp(1.8rem, 5vw, 2.6rem); font-weight: 800; line-height: 1.2; margin-bottom: 16px; color: var(--ink); }
+      .page-hero p { font-size: 1.1rem; line-height: 1.7; color: var(--muted); max-width: 600px; }
+      .accent { color: var(--accent); }
+      h2 { font-size: 1.3rem; font-weight: 700; margin: 40px 0 12px; color: var(--ink); }
+      p { line-height: 1.75; color: var(--muted); margin-bottom: 16px; }
+      .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin: 32px 0; }
+      .feature-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
+      .feature-card .icon { font-size: 1.6rem; margin-bottom: 12px; }
+      .feature-card h3 { font-size: 1rem; font-weight: 600; margin-bottom: 8px; color: var(--ink); }
+      .feature-card p { font-size: 0.9rem; margin: 0; color: var(--muted); }
+      .page-footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 16px; font-size: 0.8rem; }
+      .page-footer a { color: var(--muted); text-decoration: none; }
+      .page-footer a:hover { color: var(--ink); }
+    </style>
+      <meta property="og:image" content="https://shareli.online/logo.jpg" />
+    <meta name="twitter:image" content="https://shareli.online/logo.jpg" />
+  </head>
+  <body>
+    <main class="page-wrap">
+      <nav class="page-nav">
+        <a href="/">
+          <img src="/logo.jpg" alt="Shareli" style="width:20px;height:20px;border-radius:4px;" />
+          ← Back to Shareli
+        </a>
+      </nav>
+
+      <div class="page-hero">
+        <h1>Built for <span class="accent">instant</span>, private sharing.</h1>
+        <p>Shareli was created with one goal: make sharing text, code, voice notes, and files as fast and secure as possible — without requiring an account, email, or any personal information.</p>
+      </div>
+
+      <h2>Our Mission</h2>
+      <p>In a world where data privacy is increasingly threatened, moving information from one device to another should not leave a permanent digital footprint. Shareli is designed around this principle — your data belongs only to you, and once it's gone, it's truly gone.</p>
+      <p>We built Shareli for developers, students, professionals, and anyone who needs to quickly transfer information across devices without the friction of logging in or the risk of leaving data on someone else's servers.</p>
+
+      <h2>How the Encryption Works</h2>
+      <p>Shareli uses the <strong>WebCrypto API</strong> (AES-GCM 256-bit encryption) built directly into your browser. When you send a message, it is encrypted on your device before it is transmitted. The encryption key lives only in the room URL — our server never sees it and never stores your message content.</p>
+      <p>This means even if someone intercepted the data on our server, they would only see encrypted gibberish. Only people with your room link can decrypt and read the messages.</p>
+
+      <h2>Security Architecture</h2>
+      <p><strong>Cipher:</strong> AES-GCM 256-bit encryption via the native browser WebCrypto API (<code>window.crypto.subtle</code>). Each message gets a unique random 12-byte Initialization Vector (IV), ensuring identical plaintext produces different ciphertext every time.</p>
+      <p><strong>Key Derivation for Password Rooms:</strong> PBKDF2 with SHA-256 and 100,000 iterations. The salt is derived from the room ID, making brute-force attacks computationally expensive.</p>
+      <p><strong>Key Distribution:</strong> The encryption key lives exclusively in the URL hash fragment (<code>#key=...</code>). Per HTTP standard RFC 3986, URL hash fragments are processed client-side only and are <strong>never transmitted to the server</strong> in HTTP requests, headers, or WebSocket handshakes. This means the server physically cannot access the decryption key.</p>
+      <p><strong>Zero-Knowledge Server:</strong> The server receives, stores (in RAM only), and broadcasts encrypted ciphertext. It has no mechanism to decrypt any message, file, voice note, or typing indicator. Even the server operator cannot read user content.</p>
+      <p><strong>Public Room Transparency:</strong> The Public Room uses a shared static key for convenience. It is intentionally designed as an open, unencrypted space (similar to a public IRC channel). For private communication, users should always create a Private Room.</p>
+
+      <h2>Open Source &amp; Verifiable Security</h2>
+      <p>We believe that true privacy requires radical transparency. Shareli's entire codebase is 100% open source and publicly auditable on GitHub: <a href="https://github.com/hidayashaikh86-tech/livetext" target="_blank" rel="noopener noreferrer"><strong>github.com/hidayashaikh86-tech/livetext</strong></a>.</p>
+      <p>You don't need to take our word for it. You can independently verify our security claims in 10 seconds using any browser:</p>
+      <ol style="margin-left: 20px; line-height: 1.8; color: var(--muted); margin-bottom: 24px;">
+        <li>Open your browser Developer Tools (<kbd>F12</kbd> or <kbd>Cmd+Option+I</kbd>).</li>
+        <li>Go to the <strong>Network</strong> tab and filter by <strong>WS</strong> (WebSockets).</li>
+        <li>Send a message in a private room and inspect the transmitted frames. You will observe that only raw AES-GCM ciphertext is transmitted over the wire — plaintext never leaves your device.</li>
+        <li>Inspect the URL: notice that the encryption key is isolated in the URL hash fragment (<code>#key=...</code>), mathematically proving it is never sent to the server per RFC 3986.</li>
+      </ol>
+
+      <h2>Every Feature, Built In</h2>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="icon">🔐</div>
+          <h3>End-to-End Encryption</h3>
+          <p>AES-GCM 256-bit. Server never sees your content.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">🎤</div>
+          <h3>Encrypted Voice Notes</h3>
+          <p>Record and send audio messages, fully encrypted.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">📎</div>
+          <h3>File &amp; Image Sharing</h3>
+          <p>Share files up to 5MB with inline image preview and lightbox.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">📤</div>
+          <h3>Multi-File Upload</h3>
+          <p>Send up to 15+ files at once with progress tracking and auto-retry.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">⏱️</div>
+          <h3>Self-Destructing Messages</h3>
+          <p>Timers: 10s, 30s, 2m, 10m, or Keep (6 hours).</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">📌</div>
+          <h3>Message Pinning</h3>
+          <p>Pin important messages to the top of the room.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">✏️</div>
+          <h3>Edit &amp; Delete</h3>
+          <p>Edit your own messages. Admins can delete others' messages.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">💬</div>
+          <h3>Real-Time Typing Indicators</h3>
+          <p>See what others are typing, live.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">🌗</div>
+          <h3>Dark &amp; Light Theme</h3>
+          <p>Toggle between themes. Preference saved locally.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">🔔</div>
+          <h3>Smart Notifications</h3>
+          <p>Browser notifications with customizable sound toggle.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">📱</div>
+          <h3>QR Code Sync</h3>
+          <p>Generate and scan QR codes to join rooms instantly.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">🔒</div>
+          <h3>Password-Protected Rooms</h3>
+          <p>Set a custom password for extra security.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">👑</div>
+          <h3>Room Admin Controls</h3>
+          <p>Room creators can moderate (delete messages, clear room).</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">📋</div>
+          <h3>Markdown &amp; Code Highlighting</h3>
+          <p>Full markdown support with syntax highlighting for 190+ languages.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">📲</div>
+          <h3>PWA (Install as App)</h3>
+          <p>Add to home screen for native app-like experience.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">📥</div>
+          <h3>Room Export</h3>
+          <p>Export entire room history as a .txt file.</p>
+        </div>
+      </div>
+
+      <h2>Why No Database? By Design.</h2>
+      <p>Most messaging platforms store your conversations in a database — sometimes indefinitely. Shareli takes a fundamentally different approach:</p>
+      <ul style="line-height: 1.75; color: var(--muted); margin-bottom: 16px; padding-left: 20px;">
+        <li style="margin-bottom: 8px;"><strong>RAM-Only Storage:</strong> All messages exist only in the server's temporary memory (RAM). There is no SQL database, no MongoDB, no file-based storage.</li>
+        <li style="margin-bottom: 8px;"><strong>Automatic Cleanup:</strong> When a message's self-destruct timer expires, it is permanently removed from memory. When the server restarts, all data is irreversibly lost.</li>
+        <li style="margin-bottom: 8px;"><strong>No Backups, No Recovery:</strong> This is intentional. If there's nothing stored, there's nothing to breach, subpoena, or leak.</li>
+        <li style="margin-bottom: 8px;"><strong>Ephemeral by Philosophy:</strong> Shareli is designed for the moment — share something now, and let it vanish. If you need permanent storage, use Google Drive or Dropbox.</li>
+      </ul>
+
+      <h2>How Shareli Compares</h2>
+      <table style="width:100%; border-collapse:collapse; margin:24px 0; font-size:0.9rem;">
+        <thead>
+          <tr>
+            <th style="padding:10px 14px; border:1px solid var(--line); text-align:center; background: var(--surface);">Feature</th>
+            <th style="padding:10px 14px; border:1px solid var(--line); text-align:center; background: var(--surface);">Shareli</th>
+            <th style="padding:10px 14px; border:1px solid var(--line); text-align:center; background: var(--surface);">Email to Self</th>
+            <th style="padding:10px 14px; border:1px solid var(--line); text-align:center; background: var(--surface);">Google Drive</th>
+            <th style="padding:10px 14px; border:1px solid var(--line); text-align:center; background: var(--surface);">Pastebin</th>
+            <th style="padding:10px 14px; border:1px solid var(--line); text-align:center; background: var(--surface);">WeTransfer</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">No Account Required</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">✅</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">✅</td>
+          </tr>
+          <tr>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">End-to-End Encrypted</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">✅</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+          </tr>
+          <tr>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">Real-Time Sync</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">✅</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+          </tr>
+          <tr>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">Self-Destructing</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">✅</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+          </tr>
+          <tr>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">Voice Notes</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">✅</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+          </tr>
+          <tr>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">Code Highlighting</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">✅</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">✅</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+          </tr>
+          <tr>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">Zero Data Retention</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">✅</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+          </tr>
+          <tr>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">File Sharing</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">✅ (5MB)</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">✅ (25MB)</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">✅ (15GB)</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">❌</td>
+            <td style="padding:10px 14px; border:1px solid var(--line); text-align:center;">✅ (2GB)</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>Shareli is not a replacement for cloud storage. It is purpose-built for quick, temporary, private sharing — the kind where you need something transferred right now, securely, and then forgotten.</p>
+
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="icon">🔐</div>
+          <h3>End-to-End Encrypted</h3>
+          <p>AES-GCM encryption via the WebCrypto API. The server never sees your content.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">⏱️</div>
+          <h3>Self-Destructing</h3>
+          <p>Set timers from 10 seconds to 6 hours. Messages delete automatically with no trace.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">🚫</div>
+          <h3>No Account Needed</h3>
+          <p>No sign-up, no email, no tracking. Open the app and start sharing immediately.</p>
+        </div>
+        <div class="feature-card">
+          <div class="icon">📱</div>
+          <h3>Works Everywhere</h3>
+          <p>Any browser, any device — phone, laptop, tablet, desktop. Installable as a PWA.</p>
+        </div>
+      </div>
+
+      <h2>Who Built Shareli?</h2>
+      <p>Shareli was created and is actively maintained independently by <strong>Md Hidayatullah Shaikh</strong>. It is an open-source passion project focused on solving a real problem: the lack of a simple, secure, zero-trace tool for quickly sharing text, code, voice notes, and files between devices without sign-ups or permanent cloud storage.</p>
+      <p>You can view the source code, report issues, or contribute on GitHub: <a href="https://github.com/hidayashaikh86-tech/livetext" target="_blank" rel="noopener noreferrer"><strong>github.com/hidayashaikh86-tech/livetext</strong></a>.</p>
+      <p>Have feedback or a question? <a href="/contact.html">Contact us here</a>.</p>
+
+      <footer class="page-footer">
+        <a href="/">Home</a>
+        <a href="/blog.html">Blog</a>
+        <a href="/faq.html">FAQ</a>
+        <a href="/privacy.html">Privacy</a>
+        <a href="/terms.html">Terms</a>
+        <a href="/contact.html">Contact</a>
+        <a href="https://github.com/hidayashaikh86-tech/livetext" target="_blank" rel="noopener noreferrer">GitHub</a>
+      </footer>
+    </main>
+  </body>
+</html>
