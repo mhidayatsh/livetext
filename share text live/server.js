@@ -1310,10 +1310,43 @@ function serveFile(req, res) {
     return;
   }
 
-  const safePath = path.normalize(decodeURIComponent(requestedPath)).replace(/^(\.\.[/\\])+/, "");
-  const filePath = path.join(PUBLIC_DIR, safePath);
+  let safePath;
+  try {
+    safePath = path.normalize(decodeURIComponent(requestedPath)).replace(/^(\.\.[/\\])+/, "");
+  } catch {
+    res.writeHead(400, SECURITY_HEADERS);
+    res.end("Bad Request");
+    return;
+  }
+  let filePath = path.join(PUBLIC_DIR, safePath);
 
-  if (!filePath.startsWith(PUBLIC_DIR)) {
+  if (filePath !== PUBLIC_DIR && !filePath.startsWith(PUBLIC_DIR + path.sep)) {
+    res.writeHead(403, SECURITY_HEADERS);
+    res.end("Forbidden");
+    return;
+  }
+
+  // Resolve clean URLs and directory routes (e.g. /blog -> /blog.html, /about -> /about.html, /blog/slug -> /blog/slug.html)
+  const cleanPath = filePath.replace(/[/\\]+$/, "");
+  if (!fs.existsSync(filePath)) {
+    if (fs.existsSync(cleanPath + ".html")) {
+      filePath = cleanPath + ".html";
+    }
+  } else {
+    try {
+      const stat = fs.statSync(filePath);
+      if (stat.isDirectory()) {
+        if (fs.existsSync(cleanPath + ".html")) {
+          filePath = cleanPath + ".html";
+        } else if (fs.existsSync(path.join(filePath, "index.html"))) {
+          filePath = path.join(filePath, "index.html");
+        }
+      }
+    } catch {}
+  }
+
+  // Re-validate after path rewriting
+  if (!filePath.startsWith(PUBLIC_DIR + path.sep)) {
     res.writeHead(403, SECURITY_HEADERS);
     res.end("Forbidden");
     return;

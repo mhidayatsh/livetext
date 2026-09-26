@@ -2,12 +2,15 @@ User-agent: *
 Allow: /
 Allow: /about.html
 Allow: /blog.html
+Allow: /blog/
 Allow: /contact.html
 Allow: /faq.html
 Allow: /privacy.html
 Allow: /terms.html
 
-# Block API and WebSocket endpoints from crawlers
+# Block API, admin, and internal endpoints from crawlers
 Disallow: /health
+Disallow: /ping
+Disallow: /admin
 
 Sitemap: https://shareli.online/sitemap.xml
