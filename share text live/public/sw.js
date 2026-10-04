@@ -1,4 +1,4 @@
-const CACHE_NAME = 'shareli-cache-v20';
+const CACHE_NAME = 'shareli-cache-v22';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',

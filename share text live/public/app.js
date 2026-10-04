@@ -1337,8 +1337,119 @@ function formatTime(value) {
   }).format(new Date(value));
 }
 
+function dataURItoBlob(dataURI) {
+  try {
+    const parts = dataURI.split(',');
+    const mimeMatch = parts[0].match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : 'image/png';
+    const byteString = atob(parts[1]);
+    const ab = new ArrayBuffer(byteString.length);
+    const ia = new Uint8Array(ab);
+    for (let i = 0; i < byteString.length; i++) {
+      ia[i] = byteString.charCodeAt(i);
+    }
+    return new Blob([ia], { type: mime });
+  } catch (e) {
+    return null;
+  }
+}
+
+async function copyImageToClipboard(dataUrl, button = null) {
+  if (!dataUrl) return false;
+
+  if (button && button.dataset.isCopying === "true") return false;
+  if (button) button.dataset.isCopying = "true";
+
+  const originalHtml = button ? button.innerHTML : null;
+  const isIconBtn = button && (button.classList.contains("icon-action-btn") || button.classList.contains("icon-button") || button.classList.contains("image-overlay-btn") || !!button.querySelector("svg"));
+
+  const applySuccessFeedback = () => {
+    if (!button) return;
+    if (button.classList.contains("image-overlay-btn")) {
+      button.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Copied!';
+    } else if (isIconBtn) {
+      button.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+      button.title = "Copied!";
+    } else {
+      button.textContent = "Copied!";
+    }
+  };
+
+  const restoreButton = () => {
+    if (button) {
+      setTimeout(() => {
+        if (originalHtml) {
+          button.innerHTML = originalHtml;
+          button.title = button.getAttribute("aria-label") || button.dataset.defaultLabel || "Copy image";
+        }
+        delete button.dataset.isCopying;
+      }, 1400);
+    }
+  };
+
+  try {
+    if (!navigator.clipboard || !window.ClipboardItem) {
+      throw new Error("Async Clipboard API is not supported in this environment");
+    }
+
+    // Fast synchronous extraction if Data URL
+    let blob = null;
+    if (dataUrl.startsWith("data:")) {
+      blob = dataURItoBlob(dataUrl);
+    }
+    if (!blob) {
+      const res = await fetch(dataUrl);
+      blob = await res.blob();
+    }
+
+    // Standardize to image/png for ClipboardItem compatibility across Chromium & Safari
+    if (blob.type !== 'image/png') {
+      blob = await new Promise((resolve, reject) => {
+        const img = new Image();
+        if (!dataUrl.startsWith("data:")) {
+          img.crossOrigin = "anonymous";
+        }
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          canvas.width = img.naturalWidth || img.width;
+          canvas.height = img.naturalHeight || img.height;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0);
+          canvas.toBlob((pngBlob) => {
+            if (pngBlob) resolve(pngBlob);
+            else reject(new Error("Canvas export to PNG failed"));
+          }, "image/png");
+        };
+        img.onerror = () => reject(new Error("Failed to load image for clipboard write"));
+        img.src = dataUrl;
+      });
+    }
+
+    await navigator.clipboard.write([
+      new ClipboardItem({ 'image/png': blob })
+    ]);
+    applySuccessFeedback();
+    showToast("Image copied to clipboard!");
+    restoreButton();
+    return true;
+  } catch (err) {
+    console.error("Failed to copy image to clipboard:", err);
+    if (button) delete button.dataset.isCopying;
+    showToast("Could not copy image directly. Try Download instead.");
+    return false;
+  }
+}
+
 function formatMessageForCopy(message) {
-  return message.text;
+  if (!message) return "";
+  let text = String(message.text || "");
+  if (text.startsWith('{"__v":1')) {
+    try {
+      const parsed = JSON.parse(text);
+      return parsed.text || "";
+    } catch (e) {}
+  }
+  return text;
 }
 
 function formatRemaining(ms) {
@@ -1492,6 +1603,7 @@ function renderMessages() {
     const editForm = node.querySelector(".edit-form");
     const editInput = editForm.querySelector("textarea");
     const copyButton = node.querySelector(".copy-message");
+    const copyImageBtn = node.querySelector(".copy-image-action");
     const quickCopyBtn = node.querySelector(".quick-copy-btn");
     const quickDownloadBtn = node.querySelector(".quick-download-btn");
     const editButton = node.querySelector(".edit-message");
@@ -1658,11 +1770,21 @@ function renderMessages() {
       text.innerHTML = parseMarkdown(messageContent);
     }
     
-    if (messageContent.trim().length > 0) {
+    const isImageAttachment = !!(attachmentData && attachmentData.type && attachmentData.type.startsWith("image/"));
+    const hasTextContent = messageContent.trim().length > 0;
+
+    if (hasTextContent) {
       quickCopyBtn.classList.remove("hidden");
+      quickCopyBtn.title = "Copy text";
+      quickCopyBtn.setAttribute("aria-label", "Copy text");
+    } else if (isImageAttachment) {
+      quickCopyBtn.classList.remove("hidden");
+      quickCopyBtn.title = "Copy image";
+      quickCopyBtn.setAttribute("aria-label", "Copy image");
+    } else {
+      quickCopyBtn.classList.add("hidden");
     }
 
-    
     editInput.value = messageContent;
     expiresLabel.textContent = message.expiresAt ? "..." : "Keep";
 
@@ -1687,9 +1809,16 @@ function renderMessages() {
           const lightbox = document.getElementById("lightbox");
           const lightboxImg = document.getElementById("lightbox-img");
           const lightboxDownload = document.getElementById("lightbox-download");
+          const lightboxCopy = document.getElementById("lightbox-copy");
           
           lightboxImg.src = attachmentData.data;
           lightboxImg.alt = attachmentData.name;
+
+          if (lightboxCopy) {
+            lightboxCopy.onclick = async () => {
+              await copyImageToClipboard(attachmentData.data, lightboxCopy);
+            };
+          }
           
           // Setup lightbox download button
           lightboxDownload.onclick = async () => {
@@ -1706,9 +1835,24 @@ function renderMessages() {
           lightbox.classList.remove("hidden");
         };
         
-        // Inline Download button overlay
+        // Inline Action buttons overlay (Copy + Download)
+        const overlayActions = document.createElement("div");
+        overlayActions.className = "image-overlay-actions";
+
+        const copyImgOverlayBtn = document.createElement("button");
+        copyImgOverlayBtn.type = "button";
+        copyImgOverlayBtn.className = "image-overlay-btn image-overlay-copy";
+        copyImgOverlayBtn.title = "Copy image";
+        copyImgOverlayBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy';
+        copyImgOverlayBtn.onclick = async (e) => {
+          e.stopPropagation();
+          await copyImageToClipboard(attachmentData.data, copyImgOverlayBtn);
+        };
+
         const dlBtn = document.createElement("button");
-        dlBtn.className = "image-overlay-download";
+        dlBtn.type = "button";
+        dlBtn.className = "image-overlay-btn image-overlay-download";
+        dlBtn.title = "Download image";
         dlBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download';
         dlBtn.onclick = async (e) => {
           e.stopPropagation();
@@ -1721,9 +1865,11 @@ function renderMessages() {
           a.click();
           setTimeout(() => URL.revokeObjectURL(url), 1000);
         };
-        
+
+        overlayActions.appendChild(copyImgOverlayBtn);
+        overlayActions.appendChild(dlBtn);
         wrapper.appendChild(img);
-        wrapper.appendChild(dlBtn);
+        wrapper.appendChild(overlayActions);
         attachmentContainer.appendChild(wrapper);
       } else if (attachmentData.type.startsWith("audio/")) {
         // Voice Note — custom inline audio player
@@ -1867,14 +2013,45 @@ function renderMessages() {
       });
     }
 
-    copyButton.addEventListener("click", () => {
-      copyText(formatMessageForCopy(message), copyButton);
-      dropdown.classList.add('hidden');
-    });
+    if (copyButton) {
+      if (!hasTextContent && isImageAttachment) {
+        copyButton.textContent = "Copy image";
+        copyButton.dataset.defaultLabel = "Copy image";
+        copyButton.addEventListener("click", () => {
+          copyImageToClipboard(attachmentData.data, copyButton);
+          dropdown.classList.add('hidden');
+        });
+      } else if (hasTextContent) {
+        copyButton.textContent = "Copy text";
+        copyButton.dataset.defaultLabel = "Copy text";
+        copyButton.addEventListener("click", () => {
+          copyText(formatMessageForCopy(message), copyButton);
+          dropdown.classList.add('hidden');
+        });
+      } else {
+        copyButton.style.display = "none";
+      }
+    }
+
+    if (copyImageBtn) {
+      if (hasTextContent && isImageAttachment) {
+        copyImageBtn.classList.remove("hidden");
+        copyImageBtn.addEventListener("click", () => {
+          copyImageToClipboard(attachmentData.data, copyImageBtn);
+          dropdown.classList.add('hidden');
+        });
+      } else {
+        copyImageBtn.classList.add("hidden");
+      }
+    }
 
     if (quickCopyBtn) {
       quickCopyBtn.addEventListener("click", () => {
-        copyText(formatMessageForCopy(message), quickCopyBtn);
+        if (hasTextContent) {
+          copyText(formatMessageForCopy(message), quickCopyBtn);
+        } else if (isImageAttachment) {
+          copyImageToClipboard(attachmentData.data, quickCopyBtn);
+        }
       });
     }
 

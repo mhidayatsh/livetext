@@ -1568,10 +1568,61 @@ textarea {
   border-radius: 8px;
 }
 
-/* Image container with download overlay */
+/* Image container with action overlays */
 .image-preview-wrapper {
   position: relative;
   display: inline-block;
+}
+
+.image-preview-wrapper .image-overlay-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 2;
+}
+
+.image-preview-wrapper:hover .image-overlay-actions,
+.image-preview-wrapper:focus-within .image-overlay-actions {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .image-preview-wrapper .image-overlay-actions {
+    opacity: 0.9;
+  }
+}
+
+.image-overlay-btn {
+  background: rgba(15, 23, 42, 0.78);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 4px 9px;
+  font-size: 0.76rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  transition: all 0.15s ease;
+}
+
+.image-overlay-btn:hover {
+  background: rgba(15, 23, 42, 0.95);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: translateY(-1px);
+}
+
+.image-overlay-btn:active {
+  transform: translateY(0);
 }
 
 .image-preview-wrapper .image-overlay-download {
