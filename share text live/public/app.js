@@ -48,9 +48,11 @@ const qrcodeContainer = document.querySelector("#qrcode-container");
 const notifToggle = document.getElementById("notif-toggle");
 
 if (launchNotice) {
-  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+  if (window.location.protocol === "file:") {
     launchNotice.innerHTML = `<strong>Open this app through the local server.</strong><span>Run <code>npm start</code>, then open <code>http://127.0.0.1:3000</code>.</span>`;
     launchNotice.hidden = false;
+  } else {
+    launchNotice.hidden = true;
   }
 }
 
@@ -64,6 +66,7 @@ const boardMenu = document.getElementById("board-menu");
 const boardScrollArea = document.getElementById("board-scroll-area");
 const mobileRoomName = document.getElementById("mobile-room-name");
 const exportRoomButton = document.getElementById("export-room");
+const exportRoomMdButton = document.getElementById("export-room-md");
 
 // Reply and Pin Elements
 const replyBanner = document.getElementById("reply-banner");
@@ -78,7 +81,9 @@ const closePinnedBtn = document.getElementById("close-pinned");
 
 // Attachment Elements
 const attachButton = document.getElementById("attach-button");
+const attachPhotoBtn = document.getElementById("attach-photo-btn");
 const fileInput = document.getElementById("file-input");
+const imageInput = document.getElementById("image-input");
 const attachmentPreview = document.getElementById("attachment-preview");
 const attachmentName = document.getElementById("attachment-name");
 const removeAttachmentBtn = document.getElementById("remove-attachment");
@@ -99,6 +104,8 @@ if (lightbox) {
     }
   });
 }
+
+
 
 function detectCodeLanguage(text) {
   if (!text || typeof text !== 'string') return null;
@@ -191,6 +198,40 @@ function detectCodeLanguage(text) {
 
 let markedRendererConfigured = false;
 
+function escapeAttr(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function splitHighlighted(html) {
+  if (!html) return [' '];
+  const lines = html.split(/\r?\n/);
+  let openTags = [];
+  return lines.map((line) => {
+    let prefix = openTags.join('');
+    const tagRegex = /<\/?([a-z0-9_-]+)(?:\s+[^>]*?)?>/gi;
+    let match;
+    while ((match = tagRegex.exec(line)) !== null) {
+      const fullTag = match[0];
+      if (fullTag.startsWith('</')) {
+        openTags.pop();
+      } else if (!fullTag.endsWith('/>')) {
+        openTags.push(fullTag);
+      }
+    }
+    let suffix = openTags.map(t => {
+      const name = t.match(/<([a-z0-9_-]+)/i)[1];
+      return `</${name}>`;
+    }).reverse().join('');
+    const content = prefix + line + suffix;
+    return content === '' ? ' ' : content;
+  });
+}
+
 function parseMarkdown(text) {
   if (!window.marked || !window.DOMPurify) {
     const div = document.createElement('div');
@@ -256,7 +297,13 @@ function parseMarkdown(text) {
       const displayLang = finalLang ? (finalLang === 'xml' ? 'HTML' : finalLang.toUpperCase()) : 'CODE';
       const finalClass = finalLang ? `language-${finalLang}` : '';
 
-      return `<div class="code-block-wrapper"><div class="code-header"><span class="code-lang">${displayLang}</span><button type="button" class="code-copy-btn" title="Copy code" aria-label="Copy code">Copy</button></div><pre><code class="hljs ${finalClass}">${highlighted}</code></pre></div>`;
+      const cleanCode = code.replace(/\r\n/g, '\n').replace(/\n+$/, '');
+      const codeLines = splitHighlighted(highlighted);
+      const codeLinesHtml = codeLines.map((lineHtml, i) => 
+        `<div class="code-line"><span class="line-num" aria-hidden="true">${i + 1}</span><span class="line-code">${lineHtml}</span></div>`
+      ).join('');
+
+      return `<div class="code-block-wrapper" data-code="${escapeAttr(cleanCode)}"><div class="code-header"><span class="code-lang">${displayLang}</span><div class="code-header-actions"><button type="button" class="code-wrap-btn" title="Toggle word wrap" aria-label="Toggle word wrap">Wrap</button><button type="button" class="code-copy-btn" title="Copy code" aria-label="Copy code">Copy</button></div></div><div class="code-container hljs ${finalClass}">${codeLinesHtml}</div></div>`;
     };
 
     marked.setOptions({ renderer: renderer });
@@ -274,7 +321,7 @@ function parseMarkdown(text) {
   }
 
   const rawHtml = marked.parse(processText, { breaks: true, gfm: true });
-  return DOMPurify.sanitize(rawHtml, { ADD_TAGS: ['button'], ADD_ATTR: ['type', 'class', 'title', 'aria-label'] });
+  return DOMPurify.sanitize(rawHtml, { ADD_TAGS: ['button'], ADD_ATTR: ['type', 'class', 'title', 'aria-label', 'aria-hidden', 'data-code', 'data-md-action'] });
 }
 
 let socket;
@@ -999,13 +1046,13 @@ function setConnection(label, state) {
   statusDot.classList.toggle("syncing", state === "waiting");
 }
 
-function showToast(message) {
+function showToast(message, duration = 2800) {
   clearTimeout(toastTimer);
   toast.textContent = message;
   toast.hidden = false;
   toastTimer = setTimeout(() => {
     toast.hidden = true;
-  }, 2800);
+  }, duration);
 }
 
 function updateSendState() {
@@ -1440,6 +1487,203 @@ async function copyImageToClipboard(dataUrl, button = null) {
   }
 }
 
+async function triggerAttachmentDownload(attachmentData) {
+  if (!attachmentData || !attachmentData.data) return;
+  try {
+    const res = await fetch(attachmentData.data);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = attachmentData.name || (attachmentData.type && attachmentData.type.startsWith("image/") ? "image.png" : "download");
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  } catch (e) {
+    console.error("Download failed", e);
+    showToast("Download failed");
+  }
+}
+
+async function shareFileAttachment(attachmentData, button = null) {
+  if (!attachmentData || !attachmentData.data) return false;
+
+  try {
+    let blob = null;
+    if (attachmentData.data.startsWith("data:")) {
+      blob = dataURItoBlob(attachmentData.data);
+    } else {
+      const res = await fetch(attachmentData.data);
+      blob = await res.blob();
+    }
+    const mimeType = attachmentData.type || (blob ? blob.type : "application/octet-stream");
+    const isImage = !!(mimeType && mimeType.startsWith("image/"));
+    const fileName = attachmentData.name || (isImage ? "image.png" : "file");
+    const file = new File([blob], fileName, { type: mimeType });
+
+    // Clean promotional branding
+    const promoText = "Shared via Shareli • https://shareli.online";
+
+    // 1. Direct Native System Share with the actual file & branding!
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: fileName,
+          text: promoText
+        });
+        return true;
+      } catch (shareErr) {
+        if (shareErr.name === "AbortError") return false; // User closed share menu
+        // Retry without text in case the target app only accepts pure files
+        try {
+          await navigator.share({
+            files: [file],
+            title: fileName
+          });
+          return true;
+        } catch (retryErr) {
+          if (retryErr.name === "AbortError") return false;
+          throw retryErr;
+        }
+      }
+    }
+
+    // 2. Direct binary file sharing is not supported on this browser/OS:
+    // Download the file automatically and notify the user with a clear, professional toast
+    await triggerAttachmentDownload(attachmentData);
+    showToast("Direct sharing is not supported on this browser. File downloaded — you can now attach and send it directly!", 4500);
+    return true;
+  } catch (err) {
+    if (err.name === "AbortError") return false; // User closed system share sheet
+    console.warn("System share error:", err);
+    await triggerAttachmentDownload(attachmentData);
+    showToast("Direct sharing failed on this device. File downloaded to your device so you can share it manually.", 4500);
+    return false;
+  }
+}
+
+async function copyFileAttachment(attachmentData, button = null) {
+  if (!attachmentData || !attachmentData.data) return false;
+
+  if (button && button.dataset.isCopying === "true") return false;
+  if (button) button.dataset.isCopying = "true";
+
+  const originalHtml = button ? button.innerHTML : null;
+  const originalTitle = button ? (button.getAttribute("title") || "") : "";
+
+  const applySuccessFeedback = (label = "Copied Link!", msg = "Link copied!") => {
+    if (!button) return;
+    if (button.classList.contains("file-action-btn")) {
+      button.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> ${label}`;
+    } else if (button.classList.contains("icon-button") || button.querySelector("svg")) {
+      button.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+    } else {
+      button.textContent = label;
+    }
+    showToast(msg);
+  };
+
+  const restoreButton = () => {
+    if (button) {
+      setTimeout(() => {
+        if (originalHtml) button.innerHTML = originalHtml;
+        if (originalTitle) button.title = originalTitle;
+        delete button.dataset.isCopying;
+      }, 1800);
+    }
+  };
+
+  try {
+    const isTextFile = (attachmentData.type && (attachmentData.type.startsWith("text/") || attachmentData.type === "application/json" || attachmentData.type === "application/javascript")) ||
+      (attachmentData.name && /\.(txt|md|json|js|ts|html|css|py|java|c|cpp|sh|csv|xml|yaml|yml|sql|env)$/i.test(attachmentData.name));
+
+    // 1. Text/code files: copy actual text contents
+    if (isTextFile) {
+      let textContent = "";
+      if (attachmentData.data.startsWith("data:")) {
+        const parts = attachmentData.data.split(",");
+        if (parts.length > 1) {
+          try {
+            textContent = decodeURIComponent(escape(atob(parts[1])));
+          } catch (e) {
+            textContent = atob(parts[1]);
+          }
+        }
+      } else {
+        const res = await fetch(attachmentData.data);
+        textContent = await res.text();
+      }
+
+      if (textContent && navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(textContent);
+        applySuccessFeedback("Copied Content!", "File content copied to clipboard!");
+        restoreButton();
+        return true;
+      }
+    }
+
+    // 2. Binary files (PDF, DOCX, ZIP, etc.):
+    let blob = null;
+    if (attachmentData.data.startsWith("data:")) {
+      blob = dataURItoBlob(attachmentData.data);
+    } else {
+      const res = await fetch(attachmentData.data);
+      blob = await res.blob();
+    }
+
+    const mimeType = attachmentData.type || (blob ? blob.type : "application/octet-stream");
+    const fileName = attachmentData.name || "file";
+
+    // Attempt to write file to clipboard if browser supports it
+    if (navigator.clipboard && window.ClipboardItem) {
+      try {
+        const fileObj = new File([blob], fileName, { type: mimeType });
+        const item = new ClipboardItem({ [mimeType]: fileObj });
+        await navigator.clipboard.write([item]);
+        applySuccessFeedback("Copied File!", `"${fileName}" copied to clipboard!`);
+        restoreButton();
+        return true;
+      } catch (clipErr) {
+        // Expected in browsers without binary file clipboard support
+      }
+    }
+
+    // 3. Fallback: Copy the full shareable message with the secure room URL!
+    const roomUrl = typeof getRoomUrl === "function" ? getRoomUrl() : window.location.href;
+    const shareText = `📎 ${fileName}\n🔒 Open & Download securely on Shareli:\n${roomUrl}`;
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(shareText);
+      applySuccessFeedback("Copied Link!", `Secure link for "${fileName}" copied! Paste into WhatsApp or Telegram.`);
+      restoreButton();
+      return true;
+    }
+
+    throw new Error("Clipboard API not available");
+  } catch (err) {
+    console.error("Failed to copy file info:", err);
+    if (button) delete button.dataset.isCopying;
+    showToast("Could not copy file directly.");
+    return false;
+  }
+}
+
+function getFileEmoji(fileName = "", mimeType = "") {
+  const ext = (fileName.split('.').pop() || "").toLowerCase();
+  if (mimeType && mimeType.startsWith("image/")) return "🖼️";
+  if (mimeType && mimeType.startsWith("audio/")) return "🎵";
+  if (mimeType && mimeType.startsWith("video/")) return "🎬";
+  if (ext === "pdf") return "📕";
+  if (["zip", "rar", "7z", "tar", "gz"].includes(ext)) return "📦";
+  if (["doc", "docx", "odt", "rtf"].includes(ext)) return "📝";
+  if (["xls", "xlsx", "csv", "tsv"].includes(ext)) return "📊";
+  if (["ppt", "pptx", "key"].includes(ext)) return "📽️";
+  if (["js", "ts", "py", "html", "css", "json", "c", "cpp", "java", "rs", "go", "php", "sh", "sql"].includes(ext)) return "💻";
+  return "📄";
+}
+
 function formatMessageForCopy(message) {
   if (!message) return "";
   let text = String(message.text || "");
@@ -1532,6 +1776,8 @@ function renderMessages() {
   if (messageCount) messageCount.textContent = `${messages.length} ${messages.length === 1 ? "note" : "notes"}`;
   if (copyAllButton) copyAllButton.disabled = messages.length === 0;
   if (clearRoomButton) clearRoomButton.disabled = messages.length === 0;
+  if (exportRoomButton) exportRoomButton.disabled = messages.length === 0;
+  if (exportRoomMdButton) exportRoomMdButton.disabled = messages.length === 0;
 
   if (messages.length === 0) {
     messagesEl.innerHTML = "";
@@ -1604,7 +1850,9 @@ function renderMessages() {
     const editInput = editForm.querySelector("textarea");
     const copyButton = node.querySelector(".copy-message");
     const copyImageBtn = node.querySelector(".copy-image-action");
+    const shareAttachmentBtn = node.querySelector(".share-attachment-action");
     const quickCopyBtn = node.querySelector(".quick-copy-btn");
+    const quickShareBtn = node.querySelector(".quick-share-btn");
     const quickDownloadBtn = node.querySelector(".quick-download-btn");
     const editButton = node.querySelector(".edit-message");
     const cancelButton = node.querySelector(".cancel-edit");
@@ -1729,6 +1977,7 @@ function renderMessages() {
       if (deleteButton) deleteButton.style.display = "none";
       if (menuBtn) menuBtn.style.display = "none";
       if (quickCopyBtn) quickCopyBtn.classList.add("hidden");
+      if (quickShareBtn) quickShareBtn.classList.add("hidden");
       if (quickDownloadBtn) quickDownloadBtn.classList.add("hidden");
       if (replyButton) replyButton.style.display = "none";
       if (pinButton) pinButton.style.display = "none";
@@ -1781,6 +2030,10 @@ function renderMessages() {
       quickCopyBtn.classList.remove("hidden");
       quickCopyBtn.title = "Copy image";
       quickCopyBtn.setAttribute("aria-label", "Copy image");
+    } else if (attachmentData) {
+      quickCopyBtn.classList.remove("hidden");
+      quickCopyBtn.title = "Copy file link";
+      quickCopyBtn.setAttribute("aria-label", "Copy file link");
     } else {
       quickCopyBtn.classList.add("hidden");
     }
@@ -1790,7 +2043,12 @@ function renderMessages() {
 
     const attachmentContainer = node.querySelector(".message-attachment-container");
     if (attachmentData) {
-      quickDownloadBtn.classList.remove("hidden");
+      if (quickDownloadBtn) quickDownloadBtn.classList.remove("hidden");
+      if (quickShareBtn) {
+        quickShareBtn.classList.remove("hidden");
+        quickShareBtn.title = isImageAttachment ? "Share image" : "Share file";
+        quickShareBtn.setAttribute("aria-label", quickShareBtn.title);
+      }
       attachmentContainer.classList.remove("hidden");
       attachmentContainer.innerHTML = '';
       
@@ -1810,6 +2068,7 @@ function renderMessages() {
           const lightboxImg = document.getElementById("lightbox-img");
           const lightboxDownload = document.getElementById("lightbox-download");
           const lightboxCopy = document.getElementById("lightbox-copy");
+          const lightboxShare = document.getElementById("lightbox-share");
           
           lightboxImg.src = attachmentData.data;
           lightboxImg.alt = attachmentData.name;
@@ -1819,54 +2078,62 @@ function renderMessages() {
               await copyImageToClipboard(attachmentData.data, lightboxCopy);
             };
           }
+
+          if (lightboxShare) {
+            lightboxShare.onclick = async () => {
+              await shareFileAttachment(attachmentData, lightboxShare);
+            };
+          }
           
           // Setup lightbox download button
-          lightboxDownload.onclick = async () => {
-            const res = await fetch(attachmentData.data);
-            const blob = await res.blob();
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = attachmentData.name;
-            a.click();
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
-          };
+          if (lightboxDownload) {
+            lightboxDownload.onclick = async () => {
+              await triggerAttachmentDownload(attachmentData);
+            };
+          }
           
           lightbox.classList.remove("hidden");
         };
         
-        // Inline Action buttons overlay (Copy + Download)
+        // Inline Action buttons overlay (Copy + Share + Download)
         const overlayActions = document.createElement("div");
         overlayActions.className = "image-overlay-actions";
 
         const copyImgOverlayBtn = document.createElement("button");
         copyImgOverlayBtn.type = "button";
-        copyImgOverlayBtn.className = "image-overlay-btn image-overlay-copy";
+        copyImgOverlayBtn.className = "image-overlay-btn image-action-copy";
         copyImgOverlayBtn.title = "Copy image";
+        copyImgOverlayBtn.setAttribute("aria-label", "Copy image");
         copyImgOverlayBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy';
         copyImgOverlayBtn.onclick = async (e) => {
           e.stopPropagation();
           await copyImageToClipboard(attachmentData.data, copyImgOverlayBtn);
         };
 
+        const shareImgOverlayBtn = document.createElement("button");
+        shareImgOverlayBtn.type = "button";
+        shareImgOverlayBtn.className = "image-overlay-btn image-action-share";
+        shareImgOverlayBtn.title = "Share image";
+        shareImgOverlayBtn.setAttribute("aria-label", "Share image");
+        shareImgOverlayBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg> Share';
+        shareImgOverlayBtn.onclick = async (e) => {
+          e.stopPropagation();
+          await shareFileAttachment(attachmentData, shareImgOverlayBtn);
+        };
+
         const dlBtn = document.createElement("button");
         dlBtn.type = "button";
-        dlBtn.className = "image-overlay-btn image-overlay-download";
+        dlBtn.className = "image-overlay-btn image-action-download";
         dlBtn.title = "Download image";
+        dlBtn.setAttribute("aria-label", "Download image");
         dlBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download';
         dlBtn.onclick = async (e) => {
           e.stopPropagation();
-          const res = await fetch(attachmentData.data);
-          const blob = await res.blob();
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = attachmentData.name;
-          a.click();
-          setTimeout(() => URL.revokeObjectURL(url), 1000);
+          await triggerAttachmentDownload(attachmentData);
         };
 
         overlayActions.appendChild(copyImgOverlayBtn);
+        overlayActions.appendChild(shareImgOverlayBtn);
         overlayActions.appendChild(dlBtn);
         wrapper.appendChild(img);
         wrapper.appendChild(overlayActions);
@@ -1972,35 +2239,64 @@ function renderMessages() {
         const fileBox = document.createElement("div");
         fileBox.className = "message-file-box";
         
+        const fileHeader = document.createElement("div");
+        fileHeader.className = "file-header";
+
         const fileIcon = document.createElement("span");
         fileIcon.className = "file-icon";
-        fileIcon.textContent = "📄";
+        fileIcon.textContent = getFileEmoji(attachmentData.name, attachmentData.type);
         
         const fileName = document.createElement("span");
         fileName.className = "file-name";
         fileName.textContent = attachmentData.name;
-        
+        fileName.title = attachmentData.name;
+
+        fileHeader.append(fileIcon, fileName);
+
+        const fileActions = document.createElement("div");
+        fileActions.className = "file-actions";
+
+        const copyFileBtn = document.createElement("button");
+        copyFileBtn.type = "button";
+        copyFileBtn.className = "file-action-btn file-copy-btn";
+        copyFileBtn.title = "Copy secure link for WhatsApp/Telegram";
+        copyFileBtn.setAttribute("aria-label", "Copy link");
+        copyFileBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> Copy Link';
+        copyFileBtn.onclick = async (e) => {
+          e.preventDefault();
+          await copyFileAttachment(attachmentData, copyFileBtn);
+        };
+
+        const shareFileBtn = document.createElement("button");
+        shareFileBtn.type = "button";
+        shareFileBtn.className = "file-action-btn file-share-btn";
+        shareFileBtn.title = "Share file via WhatsApp, AirDrop, etc.";
+        shareFileBtn.setAttribute("aria-label", "Share file");
+        shareFileBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg> Share';
+        shareFileBtn.onclick = async (e) => {
+          e.preventDefault();
+          await shareFileAttachment(attachmentData, shareFileBtn);
+        };
+
         const downloadBtn = document.createElement("a");
-        downloadBtn.className = "btn-secondary file-download";
-        downloadBtn.textContent = "Download";
+        downloadBtn.className = "file-action-btn file-download-btn";
+        downloadBtn.title = "Download file";
+        downloadBtn.setAttribute("aria-label", "Download file");
+        downloadBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download';
         downloadBtn.href = "#";
         downloadBtn.onclick = async (e) => {
           e.preventDefault();
-          const res = await fetch(attachmentData.data);
-          const blob = await res.blob();
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = attachmentData.name;
-          a.click();
-          setTimeout(() => URL.revokeObjectURL(url), 1000);
+          await triggerAttachmentDownload(attachmentData);
         };
         
-        fileBox.append(fileIcon, fileName, downloadBtn);
+        fileActions.append(copyFileBtn, shareFileBtn, downloadBtn);
+        fileBox.append(fileHeader, fileActions);
         attachmentContainer.appendChild(fileBox);
       }
     } else {
       attachmentContainer.classList.add("hidden");
+      if (quickDownloadBtn) quickDownloadBtn.classList.add("hidden");
+      if (quickShareBtn) quickShareBtn.classList.add("hidden");
     }
 
     if (menuBtn && dropdown) {
@@ -2019,6 +2315,13 @@ function renderMessages() {
         copyButton.dataset.defaultLabel = "Copy image";
         copyButton.addEventListener("click", () => {
           copyImageToClipboard(attachmentData.data, copyButton);
+          dropdown.classList.add('hidden');
+        });
+      } else if (!hasTextContent && attachmentData) {
+        copyButton.textContent = "Copy file link";
+        copyButton.dataset.defaultLabel = "Copy file link";
+        copyButton.addEventListener("click", () => {
+          copyFileAttachment(attachmentData, copyButton);
           dropdown.classList.add('hidden');
         });
       } else if (hasTextContent) {
@@ -2045,26 +2348,40 @@ function renderMessages() {
       }
     }
 
+    if (shareAttachmentBtn) {
+      if (attachmentData) {
+        shareAttachmentBtn.classList.remove("hidden");
+        shareAttachmentBtn.textContent = isImageAttachment ? "Share image" : "Share file";
+        shareAttachmentBtn.addEventListener("click", () => {
+          shareFileAttachment(attachmentData, shareAttachmentBtn);
+          dropdown.classList.add('hidden');
+        });
+      } else {
+        shareAttachmentBtn.classList.add("hidden");
+      }
+    }
+
     if (quickCopyBtn) {
       quickCopyBtn.addEventListener("click", () => {
         if (hasTextContent) {
           copyText(formatMessageForCopy(message), quickCopyBtn);
         } else if (isImageAttachment) {
           copyImageToClipboard(attachmentData.data, quickCopyBtn);
+        } else if (attachmentData) {
+          copyFileAttachment(attachmentData, quickCopyBtn);
         }
       });
     }
 
-    if (quickDownloadBtn) {
+    if (quickShareBtn && attachmentData) {
+      quickShareBtn.addEventListener("click", () => {
+        shareFileAttachment(attachmentData, quickShareBtn);
+      });
+    }
+
+    if (quickDownloadBtn && attachmentData) {
       quickDownloadBtn.addEventListener("click", async () => {
-        const res = await fetch(attachmentData.data);
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = attachmentData.name;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        await triggerAttachmentDownload(attachmentData);
       });
     }
 
@@ -2503,6 +2820,23 @@ if (attachButton && fileInput) {
   });
 }
 
+if (attachPhotoBtn && imageInput) {
+  attachPhotoBtn.addEventListener("click", () => imageInput.click());
+  imageInput.addEventListener("change", async (e) => {
+    const files = Array.from(e.target.files);
+    imageInput.value = "";
+    if (!files.length) return;
+
+    if (files.length === 1) {
+      await processFile(files[0]);
+      messageInput.focus();
+    } else {
+      await sendMultipleFiles(files);
+      messageInput.focus();
+    }
+  });
+}
+
 if (removeAttachmentBtn) {
   removeAttachmentBtn.addEventListener("click", () => {
     clearAttachment();
@@ -2596,14 +2930,31 @@ document.addEventListener('click', () => {
   document.querySelectorAll('.msg-dropdown').forEach(d => d.classList.add('hidden'));
 });
 
+// Delegate click for code block wrap toggle buttons
+document.addEventListener('click', (e) => {
+  const wrapBtn = e.target.closest('.code-wrap-btn');
+  if (!wrapBtn) return;
+  const wrapper = wrapBtn.closest('.code-block-wrapper');
+  if (wrapper) {
+    const isWrapped = wrapper.classList.toggle('code-wrapped');
+    wrapBtn.classList.toggle('active', isWrapped);
+    wrapBtn.textContent = isWrapped ? 'Unwrap' : 'Wrap';
+    wrapBtn.title = isWrapped ? 'Disable word wrap' : 'Toggle word wrap';
+  }
+});
+
 // Delegate click for code block copy buttons
 document.addEventListener('click', (e) => {
   const copyBtn = e.target.closest('.code-copy-btn');
   if (!copyBtn) return;
   const wrapper = copyBtn.closest('.code-block-wrapper');
-  const codeEl = wrapper ? wrapper.querySelector('code') : null;
-  if (codeEl) {
-    copyText(codeEl.textContent, copyBtn);
+  if (!wrapper) return;
+  const rawCode = wrapper.getAttribute('data-code');
+  if (rawCode) {
+    copyText(rawCode, copyBtn);
+  } else {
+    const codeEl = wrapper.querySelector('.code-container') || wrapper.querySelector('code');
+    if (codeEl) copyText(codeEl.textContent, copyBtn);
   }
 });
 
@@ -2624,6 +2975,125 @@ saveNameButton.addEventListener("click", () => {
   }
 });
 
+// Markdown Formatting Toolbar
+const mdToolbar = document.getElementById('md-toolbar');
+if (mdToolbar) {
+  mdToolbar.addEventListener('mousedown', (e) => {
+    // Prevent textarea blur and preserve selection when clicking toolbar buttons
+    if (e.target.closest('.md-tool-btn')) {
+      e.preventDefault();
+    }
+  });
+
+  mdToolbar.addEventListener('click', (e) => {
+    const btn = e.target.closest('.md-tool-btn');
+    if (!btn) return;
+    const action = btn.dataset.mdAction;
+
+    if (action === 'image') {
+      const imgInput = document.getElementById('image-input') || fileInput;
+      if (imgInput) imgInput.click();
+      return;
+    }
+    if (action === 'file') {
+      if (fileInput) fileInput.click();
+      return;
+    }
+
+    if (action === 'image') {
+      if (imageInput) imageInput.click();
+      return;
+    }
+    if (action === 'file') {
+      if (fileInput) fileInput.click();
+      return;
+    }
+
+    const textarea = messageInput;
+    if (!textarea) return;
+    
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = textarea.value;
+    const selected = text.substring(start, end);
+    
+    let before = '', after = '', insert = '';
+    
+    switch (action) {
+      case 'bold':
+        before = '**'; after = '**';
+        insert = selected || 'bold text';
+        break;
+      case 'italic':
+        before = '*'; after = '*';
+        insert = selected || 'italic text';
+        break;
+      case 'code':
+        before = '`'; after = '`';
+        insert = selected || 'code';
+        break;
+      case 'codeblock':
+        before = (start > 0 && text[start - 1] !== '\n' ? '\n```\n' : '```\n');
+        after = '\n```\n';
+        insert = selected || 'code here';
+        break;
+      case 'link':
+        if (selected) {
+          before = '['; after = '](url)';
+          insert = selected;
+        } else {
+          before = '['; after = '](url)';
+          insert = 'link text';
+        }
+        break;
+      case 'heading':
+        before = (start > 0 && text[start - 1] !== '\n' ? '\n### ' : '### ');
+        insert = selected || 'Heading';
+        break;
+      case 'list':
+        if (selected) {
+          insert = selected.split('\n').map(line => `- ${line}`).join('\n');
+        } else {
+          before = (start > 0 && text[start - 1] !== '\n' ? '\n- ' : '- ');
+          insert = 'list item';
+        }
+        break;
+      default:
+        return;
+    }
+    
+    const newText = text.substring(0, start) + before + insert + after + text.substring(end);
+    textarea.value = newText;
+    
+    // Set cursor position: select the inserted text for easy replacement
+    const newCursorStart = start + before.length;
+    const newCursorEnd = newCursorStart + insert.length;
+    textarea.setSelectionRange(newCursorStart, newCursorEnd);
+    textarea.focus();
+    
+    // Trigger input event for char count and auto-resize
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+
+// Keyboard shortcuts for markdown formatting
+if (messageInput) {
+  messageInput.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
+      let action = null;
+      if (e.key === 'b' || e.key === 'B') action = 'bold';
+      else if (e.key === 'i' || e.key === 'I') action = 'italic';
+      else if (e.key === 'k' || e.key === 'K') action = 'link';
+      
+      if (action) {
+        e.preventDefault();
+        const btn = document.querySelector(`.md-tool-btn[data-md-action="${action}"]`);
+        if (btn) btn.click();
+      }
+    }
+  });
+}
+
 nameInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
@@ -2634,6 +3104,26 @@ nameInput.addEventListener("keydown", (e) => {
 copyLinkButton.addEventListener("click", async () => {
   copyText(roomLink.value, copyLinkButton);
 });
+
+// Native Web Share API for mobile
+const webShareBtn = document.getElementById('web-share-btn');
+if (webShareBtn && navigator.share) {
+  webShareBtn.style.display = '';
+  webShareBtn.addEventListener('click', async () => {
+    const shareUrl = (roomLink && roomLink.value) ? roomLink.value : window.location.href;
+    try {
+      await navigator.share({
+        title: 'Shareli - Secure Room',
+        text: 'Join my secure sharing room on Shareli',
+        url: shareUrl
+      });
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        copyText(shareUrl, webShareBtn);
+      }
+    }
+  });
+}
 
 if (showQrBtn) {
   showQrBtn.addEventListener("click", () => {
@@ -2674,6 +3164,10 @@ if (qrModal) {
 
 if (copyAllButton) {
   copyAllButton.addEventListener("click", () => {
+    if (messages.length === 0) {
+      showToast("No messages to copy.");
+      return;
+    }
     const text = messages
       .slice()
       .sort((first, second) => first.createdAt - second.createdAt)
@@ -2687,17 +3181,21 @@ if (copyAllButton) {
 
 if (exportRoomButton) {
   exportRoomButton.addEventListener("click", () => {
+    if (messages.length === 0) {
+      showToast("No messages to export.");
+      return;
+    }
     const textContent = messages
       .slice()
       .sort((first, second) => first.createdAt - second.createdAt)
-      .map(msg => `[${formatTime(msg.createdAt)}] ${msg.authorName || "Guest"}:\n${msg.text}`)
+      .map(msg => `[${formatTime(msg.createdAt)}] ${msg.authorName || "Guest"}:\n${formatMessageForCopy(msg)}`)
       .join("\n\n----------------------------------------\n\n");
 
     const blob = new Blob([textContent], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `share-text-live-${currentRoomId}-${new Date().toISOString().slice(0,10)}.txt`;
+    a.download = `shareli-${currentRoomId}-${new Date().toISOString().slice(0,10)}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -2705,6 +3203,39 @@ if (exportRoomButton) {
     
     if (boardMenu) boardMenu.classList.add('hidden');
     showToast("Room exported to file.");
+  });
+}
+
+if (exportRoomMdButton) {
+  exportRoomMdButton.addEventListener('click', () => {
+    if (messages.length === 0) {
+      showToast("No messages to export.");
+      return;
+    }
+    const header = `# Shareli Room Export\n**Room:** ${currentRoomId}\n**Date:** ${new Date().toLocaleString()}\n\n---\n\n`;
+    const mdContent = header + messages
+      .slice()
+      .sort((first, second) => first.createdAt - second.createdAt)
+      .map(msg => {
+        const time = formatTime(msg.createdAt);
+        const author = msg.authorName || 'Guest';
+        const content = formatMessageForCopy(msg);
+        return `### ${author} — ${time}\n\n${content}`;
+      })
+      .join('\n\n---\n\n');
+
+    const blob = new Blob([mdContent], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `shareli-${currentRoomId}-${new Date().toISOString().slice(0,10)}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    if (boardMenu) boardMenu.classList.add('hidden');
+    showToast('Room exported as Markdown.');
   });
 }
 
@@ -3739,11 +4270,30 @@ window.addEventListener("focus", () => {
 
 // Register Service Worker for PWA + Notifications
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js')
-    .then((registration) => {
-      console.log('ServiceWorker registered:', registration.scope);
-    })
-    .catch((err) => {
-      console.warn('ServiceWorker registration failed:', err);
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    // Development environment: unregister all service workers and clear caches so localhost always loads live code
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+      for (const registration of registrations) {
+        registration.unregister();
+        console.log('Unregistered localhost service worker:', registration.scope);
+      }
     });
+    if ('caches' in window) {
+      caches.keys().then((names) => {
+        for (const name of names) {
+          caches.delete(name);
+        }
+      });
+    }
+  } else {
+    // Production environment: register service worker with update check
+    navigator.serviceWorker.register('/sw.js')
+      .then((registration) => {
+        registration.update();
+        console.log('ServiceWorker registered:', registration.scope);
+      })
+      .catch((err) => {
+        console.warn('ServiceWorker registration failed:', err);
+      });
+  }
 }

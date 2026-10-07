@@ -119,7 +119,12 @@ function getCacheHeaders(filePath) {
     return { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache', 'Expires': '0' };
   }
 
-  // CSS & JS — 7-day cache with background revalidation (updates arrive on next visit)
+  // Core app bundles — always revalidate so UI updates are immediately visible
+  if (basename === 'styles.css' || basename === 'app.js' || basename === 'admin.js') {
+    return { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache', 'Expires': '0' };
+  }
+
+  // Other CSS & JS — 7-day cache with background revalidation
   if (ext === '.css' || ext === '.js' || ext === '.json') {
     return { 'Cache-Control': 'public, max-age=604800, stale-while-revalidate=86400' };
   }

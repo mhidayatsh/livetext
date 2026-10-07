@@ -1,7 +1,9 @@
-const CACHE_NAME = 'shareli-cache-v22';
+const CACHE_NAME = 'shareli-cache-v34';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
+  '/styles.css?v=34',
+  '/app.js?v=34',
   '/styles.css',
   '/app.js',
   '/manifest.json',
@@ -19,15 +21,15 @@ const ASSETS_TO_CACHE = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('Opened cache');
+      console.log('Opened cache', CACHE_NAME);
       return cache.addAll(ASSETS_TO_CACHE);
     })
   );
-  // Force the waiting service worker to become the active service worker.
+  // Force the waiting service worker to become the active service worker immediately.
   self.skipWaiting();
 });
 
-// Activate Event: Clean up old caches
+// Activate Event: Clean up all old caches
 self.addEventListener('activate', (event) => {
   const cacheWhitelist = [CACHE_NAME];
   event.waitUntil(
@@ -35,39 +37,55 @@ self.addEventListener('activate', (event) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
           if (!cacheWhitelist.includes(cacheName)) {
+            console.log('Deleting old cache:', cacheName);
             return caches.delete(cacheName);
           }
         })
       );
     })
   );
-  // Ensure that the new service worker takes control immediately.
+  // Ensure that the new service worker takes control immediately across all tabs.
   self.clients.claim();
+  // On localhost, self-unregister to ensure development changes are always live
+  if (self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1') {
+    self.registration.unregister();
+  }
 });
 
-// Fetch Event: Network-first for HTML, Cache-first for assets
+// Fetch Event: Smart routing
 self.addEventListener('fetch', (event) => {
-  // We only want to cache GET requests
+  // We only want to handle GET requests
   if (event.request.method !== 'GET') {
     return;
   }
 
   // Security & Stability: ONLY intercept HTTP and HTTPS requests.
-  // Ignore chrome-extension://, moz-extension://, data:, blob: to prevent Cache.put failures.
   if (!event.request.url.startsWith('http://') && !event.request.url.startsWith('https://')) {
     return;
   }
   
-  // Skip WebSocket connections or API endpoints if any
+  // Skip WebSocket connections or API endpoints
   if (event.request.url.includes('/socket.io') || event.request.url.includes('ws://') || event.request.url.includes('wss://')) {
     return;
   }
 
-  // Network-First strategy for HTML pages (navigation)
-  if (event.request.mode === 'navigate' || (event.request.headers.get('accept') && event.request.headers.get('accept').includes('text/html'))) {
+  // ON LOCALHOST / DEV: Always fetch fresh from network to prevent dev caching issues
+  if (self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1') {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  const url = event.request.url;
+  const isHtml = event.request.mode === 'navigate' || (event.request.headers.get('accept') && event.request.headers.get('accept').includes('text/html'));
+  const isCoreAsset = url.includes('styles.css') || url.includes('app.js') || url.includes('?v=');
+
+  // Network-First strategy for HTML and core application bundles (CSS, JS)
+  // Ensures fresh code is always delivered when connected, falling back to cache if offline
+  if (isHtml || isCoreAsset) {
     event.respondWith(
       fetch(event.request).then((response) => {
-        // Cache the latest version if successful
         if (response && response.status === 200 && (response.type === 'basic' || response.type === 'cors')) {
           const responseToCache = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
@@ -76,32 +94,30 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       }).catch(() => {
-        // Fallback to cache if network fails
         return caches.match(event.request).then((cachedResponse) => {
-          return cachedResponse || caches.match('/index.html') || caches.match('/');
+          if (cachedResponse) return cachedResponse;
+          if (isHtml) return caches.match('/index.html') || caches.match('/');
+          return new Response('', { status: 408, statusText: 'Offline' });
         });
       })
     );
     return;
   }
 
-  // Cache-First strategy for other static assets (CSS, JS, Images)
+  // Cache-First with background revalidation for immutable static assets (images, fonts)
   event.respondWith(
     caches.match(event.request).then((response) => {
-      // Cache hit - return response
       if (response) {
-        // Stale-while-revalidate for assets: return cache, but update it in the background
         fetch(event.request).then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
             caches.open(CACHE_NAME).then((cache) => {
               cache.put(event.request, networkResponse.clone()).catch(() => {});
             });
           }
-        }).catch(() => {}); // Ignore background fetch errors
+        }).catch(() => {});
         return response;
       }
 
-      // Not in cache, fetch from network
       return fetch(event.request).then((networkResponse) => {
         if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
           return networkResponse;
@@ -112,7 +128,6 @@ self.addEventListener('fetch', (event) => {
         });
         return networkResponse;
       }).catch(() => {
-        // Graceful fallback so fetchEvent promise is NEVER rejected unhandled
         return caches.match(event.request).then((cached) => {
           return cached || new Response('', { status: 408, statusText: 'Offline or network error' });
         });
