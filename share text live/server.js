@@ -1529,10 +1529,10 @@ server.on("upgrade", (req, socket) => {
     isAuthenticated = !!(providedAuth && safeCompare(room.authHash, providedAuth));
   }
 
-  // Close and cleanup any existing stale connection from this same session & IP
+  // Close and cleanup any existing stale connection from this same session (e.g. WiFi <-> Cellular switch)
   if (sessionId) {
     for (const [existingConnId, existingClient] of clients.entries()) {
-      if (existingClient.id === id && existingClient.ip === clientIp) {
+      if (existingClient.id === id) {
         const oldRoom = rooms.get(existingClient.roomId);
         cleanupClient(existingConnId, existingClient, oldRoom);
         try {

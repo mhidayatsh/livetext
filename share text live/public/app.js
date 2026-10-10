@@ -670,11 +670,13 @@ async function decryptText(encryptedPayload) {
   }
 }
 
-function disconnect() {
+function disconnect(options = {}) {
   clearTimeout(reconnectTimer);
   stopHeartbeat();
   if (socket) {
-    intentionalDisconnect = true;
+    if (options.intentional !== false) {
+      intentionalDisconnect = true;
+    }
     const s = socket;
     socket = null;
     s.onopen = null;
@@ -691,6 +693,30 @@ function disconnect() {
   updateSendState();
 }
 
+function forceReconnect(reason = "auto") {
+  clearTimeout(reconnectTimer);
+  reconnectAttempts = 0;
+  intentionalDisconnect = false;
+  stopHeartbeat();
+
+  if (socket) {
+    const s = socket;
+    socket = null;
+    s.onopen = null;
+    s.onmessage = null;
+    s.onerror = null;
+    s.onclose = null;
+    try {
+      s.close();
+    } catch (e) {}
+  }
+
+  isConnected = false;
+  updateSendState();
+  setConnection("Reconnecting...", "waiting");
+  connect();
+}
+
 async function connect(options = {}) {
   if (!options.skipCrypto) await setupCryptoKey();
   updateRoomUi();
@@ -700,10 +726,11 @@ async function connect(options = {}) {
     return;
   }
 
-  // Ensure any existing socket is cleanly disconnected
+  // Ensure any existing socket is cleanly disconnected without setting intentional flag
   if (socket) {
-    disconnect();
+    disconnect({ intentional: false });
   }
+  intentionalDisconnect = false;
   clearTimeout(reconnectTimer);
 
   const protocol = location.protocol === "https:" ? "wss" : "ws";
@@ -744,6 +771,7 @@ async function connect(options = {}) {
     if (socket !== curSocket) return;
     isConnected = true;
     reconnectAttempts = 0;
+    lastPongTime = Date.now();
     updateSendState();
     setConnection("Connected live. Syncing...", "waiting");
     startHeartbeat();
@@ -751,6 +779,7 @@ async function connect(options = {}) {
 
   curSocket.addEventListener("message", async (event) => {
     if (socket !== curSocket) return;
+    lastPongTime = Date.now();
     const payload = JSON.parse(event.data);
     if (payload.type === "pong") {
       serverOffset = (payload.serverTime || Date.now()) - Date.now();
@@ -944,13 +973,33 @@ async function connect(options = {}) {
 }
 
 let heartbeatTimer = null;
+let lastPongTime = Date.now();
+
 function startHeartbeat() {
   stopHeartbeat();
+  lastPongTime = Date.now();
   heartbeatTimer = setInterval(() => {
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      send({ type: "ping" });
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      stopHeartbeat();
+      return;
     }
-  }, 20000);
+
+    // If no pong or server message received for > 28s, connection is a zombie
+    const timeSincePong = Date.now() - lastPongTime;
+    if (timeSincePong > 28000) {
+      console.warn("[Shareli] Heartbeat timeout: no response in", Math.round(timeSincePong / 1000), "s. Forcing reconnect.");
+      stopHeartbeat();
+      forceReconnect("heartbeat_timeout");
+      return;
+    }
+
+    try {
+      send({ type: "ping" });
+    } catch (err) {
+      console.warn("[Shareli] Ping send failed:", err);
+      forceReconnect("ping_error");
+    }
+  }, 12000);
 }
 
 function stopHeartbeat() {
@@ -970,12 +1019,25 @@ function scheduleReconnect() {
 
   isConnected = false;
   updateSendState();
-  setConnection("Reconnecting...", "offline");
   clearTimeout(reconnectTimer);
 
+  // If the browser knows the device is offline, update UI and poll gently
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    setConnection("Offline (No Internet)", "offline");
+    reconnectTimer = setTimeout(() => {
+      if (typeof navigator !== "undefined" && navigator.onLine) {
+        forceReconnect("online_poll");
+      } else {
+        scheduleReconnect();
+      }
+    }, 3000);
+    return;
+  }
+
+  setConnection("Reconnecting...", "waiting");
   reconnectAttempts += 1;
-  // Exponential backoff: 1.2s, 1.7s, 2.4s, up to 8s max (prevents console spam)
-  const delay = Math.min(1200 * Math.pow(1.4, reconnectAttempts - 1), 8000);
+  // Fast exponential backoff: 1.2s, 1.5s, 1.9s, capped at 5s max so user reconnects quickly
+  const delay = Math.min(1200 * Math.pow(1.25, reconnectAttempts - 1), 5000);
   reconnectTimer = setTimeout(connect, delay);
 }
 
@@ -1342,9 +1404,8 @@ async function waitForConnection(timeoutMs = 8000) {
   if (socket && socket.readyState === WebSocket.OPEN && isConnected) {
     return true;
   }
-  if (!socket || socket.readyState === WebSocket.CLOSED) {
-    clearTimeout(reconnectTimer);
-    connect();
+  if (!socket || socket.readyState === WebSocket.CLOSED || socket.readyState === WebSocket.CLOSING || !isConnected) {
+    forceReconnect("waitForConnection");
   }
   const startTime = Date.now();
   while (Date.now() - startTime < timeoutMs) {
@@ -4472,22 +4533,53 @@ async function showBrowserNotification(message) {
 connect();
 setInterval(updateCountdowns, 1000);
 
-// Auto-reconnect on mobile tab resume / focus (e.g. returning from file picker)
+// Native Online / Offline event listeners for instant reconnection
+window.addEventListener("online", () => {
+  console.log("[Shareli] Network online event detected — reconnecting immediately");
+  showToast("Internet connection restored. Reconnecting...", 2200);
+  forceReconnect("network_online");
+});
+
+window.addEventListener("offline", () => {
+  console.log("[Shareli] Network offline event detected");
+  setConnection("Offline (No Internet)", "offline");
+  updateSendState();
+  showToast("You are currently offline. Will reconnect automatically once online.", 3200);
+});
+
+// Auto-reconnect on mobile tab resume / focus (e.g. returning from lock screen, other tabs, file picker)
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") {
-    if (!socket || socket.readyState === WebSocket.CLOSED || socket.readyState === WebSocket.CLOSING) {
-      clearTimeout(reconnectTimer);
-      connect();
+    const isStale = !socket ||
+                    socket.readyState !== WebSocket.OPEN ||
+                    !isConnected ||
+                    (Date.now() - lastPongTime > 25000);
+    if (isStale) {
+      console.log("[Shareli] Tab became visible and connection was not healthy. Reconnecting...");
+      forceReconnect("tab_visible");
     }
   }
 });
 
 window.addEventListener("focus", () => {
-  if (!socket || socket.readyState === WebSocket.CLOSED || socket.readyState === WebSocket.CLOSING) {
-    clearTimeout(reconnectTimer);
-    connect();
+  const isStale = !socket ||
+                  socket.readyState !== WebSocket.OPEN ||
+                  !isConnected ||
+                  (Date.now() - lastPongTime > 25000);
+  if (isStale) {
+    console.log("[Shareli] Window focused and connection was not healthy. Reconnecting...");
+    forceReconnect("window_focus");
   }
 });
+
+// Periodic background watchdog: check connection health every 15 seconds
+setInterval(() => {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+  if (!isConnected && !reconnectTimer) {
+    console.log("[Shareli] Watchdog noticed disconnected state without timer. Reconnecting...");
+    forceReconnect("periodic_watchdog");
+  }
+}, 15000);
 
 // Register Service Worker for PWA + Notifications
 if ('serviceWorker' in navigator) {
