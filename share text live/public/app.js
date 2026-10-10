@@ -77,6 +77,10 @@ const cancelReplyBtn = document.getElementById("cancel-reply");
 const pinnedBanner = document.getElementById("pinned-banner");
 const pinnedAuthor = document.getElementById("pinned-author");
 const pinnedSnippet = document.getElementById("pinned-snippet");
+const pinnedTag = document.getElementById("pinned-tag");
+const prevPinnedBtn = document.getElementById("prev-pinned");
+const nextPinnedBtn = document.getElementById("next-pinned");
+const pinnedJumpTrigger = document.getElementById("pinned-jump-trigger");
 const closePinnedBtn = document.getElementById("close-pinned");
 
 // Attachment Elements
@@ -342,7 +346,21 @@ let toastTimer;
 let roomSwitchInProgress = false;
 let replyingToMessage = null;
 let currentAttachment = null;
-let pinnedMessageId = null;
+let pinnedMessageIds = [];
+let currentPinnedIndex = 0;
+
+function syncPinnedPayload(payload) {
+  if (Array.isArray(payload.pinnedMessageIds)) {
+    pinnedMessageIds = payload.pinnedMessageIds;
+  } else if (payload.pinnedMessageId) {
+    pinnedMessageIds = [payload.pinnedMessageId];
+  } else if (payload.pinnedMessageId === null && !payload.pinnedMessageIds) {
+    pinnedMessageIds = [];
+  }
+  if (currentPinnedIndex >= pinnedMessageIds.length) {
+    currentPinnedIndex = Math.max(0, pinnedMessageIds.length - 1);
+  }
+}
 let roomCryptoKey = null;
 
 let renderTimeout;
@@ -477,7 +495,8 @@ function promptForPassword() {
     // underneath the password modal when re-entering a password-protected room.
     messages = [];
     typingDrafts = [];
-    pinnedMessageId = null;
+    pinnedMessageIds = [];
+    currentPinnedIndex = 0;
     if (messagesEl) messagesEl.innerHTML = "";
     
     const pinnedContainer = document.getElementById("pinned-message-container");
@@ -793,7 +812,7 @@ async function connect(options = {}) {
       }
       
       typingDrafts = payload.drafts || [];
-      pinnedMessageId = payload.pinnedMessageId || null;
+      syncPinnedPayload(payload);
       serverOffset = (payload.serverTime || Date.now()) - Date.now();
       renderPinnedMessage();
       renderTypingDrafts();
@@ -817,7 +836,7 @@ async function connect(options = {}) {
 
     if (payload.type === "messages") {
       messages = payload.messages || [];
-      pinnedMessageId = payload.pinnedMessageId || null;
+      syncPinnedPayload(payload);
       serverOffset = (payload.serverTime || Date.now()) - Date.now();
       renderMessages();
       renderPinnedMessage();
@@ -852,22 +871,28 @@ async function connect(options = {}) {
     
     if (payload.type === "deleteMessage") {
       messages = messages.filter(m => m.id !== payload.messageId);
-      if (payload.pinnedMessageId !== undefined) {
-        pinnedMessageId = payload.pinnedMessageId;
-      }
+      pinnedMessageIds = pinnedMessageIds.filter(id => id !== payload.messageId);
+      syncPinnedPayload(payload);
       renderMessages();
       renderPinnedMessage();
     }
     
     if (payload.type === "pinMessage") {
-      pinnedMessageId = payload.pinnedMessageId || null;
+      const prevCount = pinnedMessageIds.length;
+      syncPinnedPayload(payload);
       renderMessages();
       renderPinnedMessage();
+      if (pinnedMessageIds.length > prevCount) {
+        showToast("Note pinned to top.");
+      } else if (pinnedMessageIds.length < prevCount) {
+        showToast("Note unpinned.");
+      }
     }
 
     if (payload.type === "clearMessages") {
       messages = [];
-      pinnedMessageId = null;
+      pinnedMessageIds = [];
+      currentPinnedIndex = 0;
       renderMessages();
       renderPinnedMessage();
     }
@@ -1023,7 +1048,8 @@ function switchRoom(roomId, options = {}) {
   messages = [];
   typingDrafts = [];
   clientId = "";
-  pinnedMessageId = null;
+  pinnedMessageIds = [];
+  currentPinnedIndex = 0;
   setReplyingTo(null);
   clearAttachment();
   messageInput.value = "";
@@ -1382,6 +1408,39 @@ function formatTime(value) {
     hour: "numeric",
     minute: "2-digit"
   }).format(new Date(value));
+}
+
+function getMessageSnippet(msg, maxLen = 80) {
+  if (!msg) return "";
+  let raw = msg.text || "";
+  if (raw.startsWith('{"__v":1')) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed.file) {
+        const f = parsed.file;
+        const fname = f.name ? ` "${f.name}"` : "";
+        if (f.type && f.type.startsWith("image/")) {
+          return `📷 Photo${fname}`;
+        } else if (f.type && f.type.startsWith("audio/")) {
+          return `🎤 Voice note${fname}`;
+        } else if (f.type && f.type.startsWith("video/")) {
+          return `🎥 Video${fname}`;
+        } else {
+          return `📎 File${fname}`;
+        }
+      }
+      if (parsed.text) {
+        raw = parsed.text;
+      }
+    } catch (e) {}
+  }
+  if (raw === "🔒 Encrypted Message") {
+    return "🔒 Encrypted note";
+  }
+  const clean = raw.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!clean) return "Note";
+  if (clean.length <= maxLen) return clean;
+  return clean.slice(0, maxLen).trim() + "…";
 }
 
 function dataURItoBlob(dataURI) {
@@ -1753,8 +1812,8 @@ function updateCountdowns() {
           card.remove();
           if (msgId) {
             messages = messages.filter(m => m.id !== msgId);
-            if (pinnedMessageId === msgId) {
-              pinnedMessageId = null;
+            if (pinnedMessageIds.includes(msgId)) {
+              pinnedMessageIds = pinnedMessageIds.filter(id => id !== msgId);
               renderPinnedMessage();
             }
             if (messageCount) {
@@ -1831,8 +1890,21 @@ function renderMessages() {
   }
 
   for (const message of messages) {
+    const isPinned = pinnedMessageIds.includes(message.id);
     const existingNode = messagesEl.querySelector(`.message-card[data-message-id="${message.id}"]`);
     if (existingNode) {
+      existingNode.classList.toggle("is-pinned", isPinned);
+      const pinnedBadge = existingNode.querySelector(".message-pinned-badge");
+      if (pinnedBadge) {
+        pinnedBadge.classList.toggle("hidden", !isPinned);
+      }
+      const existingPinBtn = existingNode.querySelector(".pin-message");
+      if (existingPinBtn) {
+        existingPinBtn.textContent = isPinned ? "Unpin" : "Pin";
+        existingPinBtn.title = isPinned ? "Unpin this note" : "Pin note to top";
+        existingPinBtn.setAttribute("aria-label", isPinned ? "Unpin this note" : "Pin note to top");
+      }
+
       const msgUpdatedAt = String(message.updatedAt || message.createdAt || "");
       if (existingNode.dataset.updatedAt === msgUpdatedAt) {
         existingNode.classList.toggle("is-pending", !!message.isPending);
@@ -1873,6 +1945,17 @@ function renderMessages() {
     node.dataset.expiresAt = message.expiresAt || "";
     node.dataset.updatedAt = message.updatedAt || message.createdAt || "";
     
+    node.classList.toggle("is-pinned", isPinned);
+    const pinnedBadge = node.querySelector(".message-pinned-badge");
+    if (pinnedBadge) {
+      pinnedBadge.classList.toggle("hidden", !isPinned);
+    }
+    if (pinButton) {
+      pinButton.textContent = isPinned ? "Unpin" : "Pin";
+      pinButton.title = isPinned ? "Unpin this note" : "Pin note to top";
+      pinButton.setAttribute("aria-label", isPinned ? "Unpin this note" : "Pin note to top");
+    }
+
     const isOwnMessage = message.authorId === clientId;
     
     if (isOwnMessage) {
@@ -1941,17 +2024,21 @@ function renderMessages() {
       if (parentMsg) {
         replyContext.classList.remove('hidden');
         replyContextAuthor.textContent = parentMsg.authorName || "Guest";
-        replyContextText.textContent = (parentMsg.text || "").slice(0, 100).replace(/\n/g, ' ') + "...";
+        replyContextText.textContent = getMessageSnippet(parentMsg, 90);
         
         replyContext.addEventListener('click', () => {
           const targetCard = document.querySelector(`.message-card[data-message-id="${parentMsg.id}"]`);
-          if (targetCard) targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          if (targetCard) {
+            targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            targetCard.classList.remove('pulse-highlight');
+            void targetCard.offsetWidth;
+            targetCard.classList.add('pulse-highlight');
+            setTimeout(() => {
+              targetCard.classList.remove('pulse-highlight');
+            }, 2000);
+          }
         });
       }
-    }
-    
-    if (message.id === pinnedMessageId) {
-      pinButton.textContent = "Unpin";
     }
 
     timestamp.textContent = message.updatedAt !== message.createdAt
@@ -2302,6 +2389,12 @@ function renderMessages() {
     if (menuBtn && dropdown) {
       menuBtn.addEventListener('click', (e) => {
         e.stopPropagation();
+        const isPinnedNow = pinnedMessageIds.includes(message.id);
+        if (pinButton) {
+          pinButton.textContent = isPinnedNow ? "Unpin" : "Pin";
+          pinButton.title = isPinnedNow ? "Unpin this note" : "Pin note to top";
+          pinButton.setAttribute("aria-label", isPinnedNow ? "Unpin this note" : "Pin note to top");
+        }
         document.querySelectorAll('.msg-dropdown').forEach(d => {
           if (d !== dropdown) d.classList.add('hidden');
         });
@@ -2472,11 +2565,22 @@ function renderMessages() {
     });
 
     pinButton.addEventListener("click", () => {
-      if (message.id === pinnedMessageId) {
-        send({ type: "unpin" });
+      const isPinnedNow = pinnedMessageIds.includes(message.id);
+      if (isPinnedNow) {
+        pinnedMessageIds = pinnedMessageIds.filter(id => id !== message.id);
+        if (currentPinnedIndex >= pinnedMessageIds.length) {
+          currentPinnedIndex = Math.max(0, pinnedMessageIds.length - 1);
+        }
+        send({ type: "unpin", id: message.id });
+        showToast("Note unpinned.");
       } else {
+        pinnedMessageIds = [message.id, ...pinnedMessageIds.filter(id => id !== message.id)];
+        currentPinnedIndex = 0; // Focus on the newly pinned note
         send({ type: "pin", id: message.id });
+        showToast("Note pinned to top.");
       }
+      renderMessages();
+      renderPinnedMessage();
       dropdown.classList.add('hidden');
     });
 
@@ -2601,7 +2705,7 @@ function setReplyingTo(message) {
   if (message) {
     replyBanner.classList.remove('hidden');
     replyAuthor.textContent = message.authorName || "Guest";
-    replySnippet.textContent = (message.text || "").replace(/\n/g, ' ').slice(0, 60) + "...";
+    replySnippet.textContent = getMessageSnippet(message, 60);
     messageInput.focus();
   } else {
     replyBanner.classList.add('hidden');
@@ -2897,30 +3001,131 @@ document.addEventListener("drop", async (e) => {
 });
 
 function renderPinnedMessage() {
-  if (pinnedMessageId && pinnedBanner) {
-    const msg = messages.find(m => m.id === pinnedMessageId);
-    if (msg) {
-      pinnedBanner.classList.remove('hidden');
-      pinnedAuthor.textContent = msg.authorName || "Guest";
-      pinnedSnippet.textContent = (msg.text || "").replace(/\n/g, ' ').slice(0, 80) + "...";
-      
-      pinnedBanner.onclick = (e) => {
-        if (e.target.closest('#close-pinned')) return;
-        const targetCard = document.querySelector(`.message-card[data-message-id="${msg.id}"]`);
-        if (targetCard) targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      };
-    } else {
-      pinnedBanner.classList.add('hidden');
-    }
-  } else if (pinnedBanner) {
+  if (!pinnedBanner) return;
+
+  const validPinned = pinnedMessageIds
+    .map(id => messages.find(m => m.id === id))
+    .filter(Boolean);
+
+  if (validPinned.length === 0) {
     pinnedBanner.classList.add('hidden');
+    return;
   }
+
+  if (currentPinnedIndex >= validPinned.length) {
+    currentPinnedIndex = Math.max(0, validPinned.length - 1);
+  }
+
+  const currentMsg = validPinned[currentPinnedIndex];
+  pinnedBanner.classList.remove('hidden');
+
+  if (pinnedTag) {
+    pinnedTag.textContent = validPinned.length > 1
+      ? `Pinned Note (${currentPinnedIndex + 1}/${validPinned.length})`
+      : "Pinned Note";
+  }
+
+  if (pinnedAuthor) {
+    pinnedAuthor.textContent = currentMsg.authorName || "Guest";
+  }
+  if (pinnedSnippet) {
+    pinnedSnippet.textContent = getMessageSnippet(currentMsg, 90);
+  }
+
+  if (prevPinnedBtn && nextPinnedBtn) {
+    const showNav = validPinned.length > 1;
+    prevPinnedBtn.classList.toggle('hidden', !showNav);
+    nextPinnedBtn.classList.toggle('hidden', !showNav);
+  }
+}
+
+if (pinnedJumpTrigger || pinnedBanner) {
+  const triggerEl = pinnedJumpTrigger || pinnedBanner;
+  triggerEl.addEventListener('click', (e) => {
+    if (e.target.closest('#close-pinned') || e.target.closest('#prev-pinned') || e.target.closest('#next-pinned')) return;
+    const validPinned = pinnedMessageIds
+      .map(id => messages.find(m => m.id === id))
+      .filter(Boolean);
+    if (validPinned.length === 0) return;
+
+    const currentMsg = validPinned[currentPinnedIndex];
+    if (currentMsg) {
+      const targetCard = document.querySelector(`.message-card[data-message-id="${currentMsg.id}"]`);
+      if (targetCard) {
+        targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        targetCard.classList.remove('pulse-highlight');
+        void targetCard.offsetWidth;
+        targetCard.classList.add('pulse-highlight');
+        setTimeout(() => targetCard.classList.remove('pulse-highlight'), 2000);
+      }
+    }
+
+    // If multiple pinned, clicking steps to the next one
+    if (validPinned.length > 1) {
+      currentPinnedIndex = (currentPinnedIndex + 1) % validPinned.length;
+      renderPinnedMessage();
+    }
+  });
+}
+
+if (prevPinnedBtn) {
+  prevPinnedBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const validPinned = pinnedMessageIds.map(id => messages.find(m => m.id === id)).filter(Boolean);
+    if (validPinned.length <= 1) return;
+    currentPinnedIndex = (currentPinnedIndex - 1 + validPinned.length) % validPinned.length;
+    renderPinnedMessage();
+    const msg = validPinned[currentPinnedIndex];
+    if (msg) {
+      const card = document.querySelector(`.message-card[data-message-id="${msg.id}"]`);
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card.classList.remove('pulse-highlight');
+        void card.offsetWidth;
+        card.classList.add('pulse-highlight');
+        setTimeout(() => card.classList.remove('pulse-highlight'), 2000);
+      }
+    }
+  });
+}
+
+if (nextPinnedBtn) {
+  nextPinnedBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const validPinned = pinnedMessageIds.map(id => messages.find(m => m.id === id)).filter(Boolean);
+    if (validPinned.length <= 1) return;
+    currentPinnedIndex = (currentPinnedIndex + 1) % validPinned.length;
+    renderPinnedMessage();
+    const msg = validPinned[currentPinnedIndex];
+    if (msg) {
+      const card = document.querySelector(`.message-card[data-message-id="${msg.id}"]`);
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card.classList.remove('pulse-highlight');
+        void card.offsetWidth;
+        card.classList.add('pulse-highlight');
+        setTimeout(() => card.classList.remove('pulse-highlight'), 2000);
+      }
+    }
+  });
 }
 
 if (closePinnedBtn) {
   closePinnedBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    send({ type: "unpin" });
+    const validPinned = pinnedMessageIds.map(id => messages.find(m => m.id === id)).filter(Boolean);
+    if (validPinned.length === 0) return;
+    const currentMsg = validPinned[currentPinnedIndex];
+    if (currentMsg) {
+      pinnedMessageIds = pinnedMessageIds.filter(id => id !== currentMsg.id);
+      if (currentPinnedIndex >= pinnedMessageIds.length) {
+        currentPinnedIndex = Math.max(0, pinnedMessageIds.length - 1);
+      }
+      send({ type: "unpin", id: currentMsg.id });
+      showToast("Note unpinned.");
+      renderMessages();
+      renderPinnedMessage();
+    }
   });
 }
 
@@ -3340,8 +3545,8 @@ newRoomButton.addEventListener("click", () => {
     roomSwitchInProgress = true;
     messages = [];
     typingDrafts = [];
-    clientId = "";
-    pinnedMessageId = null;
+    pinnedMessageIds = [];
+    currentPinnedIndex = 0;
     setReplyingTo(null);
     clearAttachment();
     messageInput.value = "";
@@ -3921,6 +4126,22 @@ if (notifSettingsModal) {
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && !notifSettingsModal.classList.contains("hidden")) closeNotifSettings();
+  });
+}
+
+// Live feedback previews for sound and haptics
+if (notifSoundToggle) {
+  notifSoundToggle.addEventListener("change", () => {
+    if (notifSoundToggle.checked) {
+      playNotificationSound();
+    }
+  });
+}
+if (notifVibrateToggle) {
+  notifVibrateToggle.addEventListener("change", () => {
+    if (notifVibrateToggle.checked && "vibrate" in navigator) {
+      try { navigator.vibrate(50); } catch (_) {}
+    }
   });
 }
 

@@ -8,7 +8,8 @@
   },
   "scripts": {
     "start": "node server.js",
-    "start:lan": "HOST=0.0.0.0 node server.js"
+    "start:lan": "HOST=0.0.0.0 node server.js",
+    "indexnow": "node scripts/submit-indexnow.js"
   },
   "keywords": [
     "live",

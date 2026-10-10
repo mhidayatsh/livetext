@@ -66,7 +66,7 @@
     <!-- QRCode.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
     
-    <link rel="stylesheet" href="/styles.css?v=34" />
+    <link rel="stylesheet" href="/styles.css?v=41" />
     
     <!-- App Icons / Favicons (Google Search & Browsers) -->
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
@@ -230,28 +230,44 @@
               <svg class="icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
             </button>
             <div class="board-tools-dropdown">
-               <button id="board-menu-btn" class="icon-button" aria-label="Room Options">
-                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+               <button id="board-menu-btn" class="icon-button" aria-label="Room Options" title="Room Options">
+                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
                </button>
-               <div id="board-menu" class="dropdown-menu hidden">
-                 <button id="notif-toggle" class="notif-toggle dropdown-toggle-item" type="button">
-                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+               <div id="board-menu" class="dropdown-menu hidden" role="menu" aria-label="Room Options">
+                 <div class="dropdown-group-title">Preferences</div>
+                 <button id="notif-toggle" class="dropdown-item notif-toggle" type="button" role="menuitem">
+                   <svg class="dropdown-item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                    <span id="notif-label">Notification settings</span>
                  </button>
-                 <button id="mute-room-btn" class="dropdown-toggle-item" type="button">
-                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                 <button id="mute-room-btn" class="dropdown-item" type="button" role="menuitem">
+                   <svg class="dropdown-item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
                    <span id="mute-room-label">Mute this room</span>
                  </button>
-                 <button id="theme-toggle" class="theme-toggle dropdown-toggle-item mobile-only" type="button">
-                   <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-                   <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                 <button id="theme-toggle" class="dropdown-item theme-toggle mobile-only" type="button" role="menuitem">
+                   <svg class="icon-sun dropdown-item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                   <svg class="icon-moon dropdown-item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
                    <span id="theme-label">Switch to light mode</span>
                  </button>
                  <hr class="dropdown-divider" />
-                 <button id="copy-all" type="button" data-default-label="Copy all messages">Copy all messages</button>
-                 <button id="export-room" type="button" data-default-label="Export room as .txt">Export room as .txt</button>
-                 <button id="export-room-md" type="button" data-default-label="Export room as .md">Export room as .md</button>
-                 <button id="clear-room" class="danger-button" type="button">Clear room</button>
+                 <div class="dropdown-group-title">Room Actions</div>
+                 <button id="copy-all" class="dropdown-item" type="button" data-default-label="Copy all messages" role="menuitem">
+                   <svg class="dropdown-item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                   <span>Copy all messages</span>
+                 </button>
+                 <button id="export-room" class="dropdown-item" type="button" data-default-label="Export room as .txt" role="menuitem">
+                   <svg class="dropdown-item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                   <span>Export as text</span>
+                   <span class="dropdown-item-badge">TXT</span>
+                 </button>
+                 <button id="export-room-md" class="dropdown-item" type="button" data-default-label="Export room as .md" role="menuitem">
+                   <svg class="dropdown-item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><polyline points="10 13 8 15 6 13"/><line x1="8" y1="15" x2="8" y2="9"/><line x1="12" y1="11" x2="16" y2="15"/></svg>
+                   <span>Export Markdown</span>
+                   <span class="dropdown-item-badge">MD</span>
+                 </button>
+                 <button id="clear-room" class="dropdown-item danger-item" type="button" role="menuitem">
+                   <svg class="dropdown-item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                   <span>Clear room</span>
+                 </button>
                </div>
             </div>
           </div>
@@ -260,17 +276,34 @@
         <section id="launch-notice" class="launch-notice" hidden></section>
 
         <!-- Pinned Message Banner -->
-        <div id="pinned-banner" class="pinned-banner hidden">
-          <div class="pinned-content">
-            <span class="pinned-icon">📌</span>
+        <div id="pinned-banner" class="pinned-banner hidden" role="region" aria-label="Pinned notes">
+          <div class="pinned-content" id="pinned-jump-trigger" title="Jump to note (click to cycle)">
+            <span class="pinned-icon" aria-hidden="true">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="17" x2="12" y2="22"/>
+                <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.89A2 2 0 0 1 15 10.77V6a3 3 0 0 0-6 0v4.77a2 2 0 0 1-1.11 1.79l-1.78.89A2 2 0 0 0 5 15.24z"/>
+              </svg>
+            </span>
             <div class="pinned-text">
-              <strong id="pinned-author"></strong>
+              <div class="pinned-meta">
+                <span id="pinned-tag" class="pinned-tag">Pinned Note</span>
+                <span class="pinned-bullet" aria-hidden="true">•</span>
+                <strong id="pinned-author"></strong>
+              </div>
               <p id="pinned-snippet"></p>
             </div>
           </div>
-          <button id="close-pinned" class="icon-button" aria-label="Unpin message">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-          </button>
+          <div class="pinned-actions">
+            <button id="prev-pinned" class="icon-button hidden" aria-label="Previous pinned note" title="Previous pinned note">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+            <button id="next-pinned" class="icon-button hidden" aria-label="Next pinned note" title="Next pinned note">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <button id="close-pinned" class="icon-button" aria-label="Unpin this note" title="Unpin this note">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
         </div>
 
         <!-- Messages Area (Scrollable) -->
@@ -417,18 +450,18 @@
 
     <!-- QR Code Modal -->
     <div id="qr-modal" class="modal-overlay hidden" aria-hidden="true">
-      <div class="modal-content" style="max-width: 320px; padding: 22px;">
-        <div class="modal-header">
-          <h3 style="margin: 0; font-size: 1.1rem;">Scan to Join</h3>
-          <button id="close-qr-modal-x" class="modal-close-icon" type="button" aria-label="Close modal">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      <div class="modal-content" style="max-width: 320px; padding: 20px 22px; border-radius: 16px;">
+        <div class="modal-header" style="margin-bottom: 12px;">
+          <h3 style="margin: 0; font-size: 1.05rem; font-weight: 600;">Scan to Join</h3>
+          <button id="close-qr-modal-x" class="notif-close-btn" type="button" aria-label="Close modal" title="Close">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
-        <div id="qrcode-container" style="display: flex; justify-content: center; background: white; padding: 14px; border-radius: 8px; margin: 14px 0;"></div>
-        <div style="display: flex; gap: 10px;">
-          <button id="close-qr-modal" class="btn-primary" type="button" style="flex: 1;">Close</button>
-          <button id="scan-from-qr-modal" class="secondary-action" type="button" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        <div id="qrcode-container" style="display: flex; justify-content: center; background: white; padding: 14px; border-radius: 12px; margin: 10px 0 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);"></div>
+        <div style="display: flex; gap: 8px;">
+          <button id="close-qr-modal" class="pw-cancel-btn" type="button">Close</button>
+          <button id="scan-from-qr-modal" class="pw-confirm-btn" type="button" style="display: flex; align-items: center; justify-content: center; gap: 6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
             Scan
           </button>
         </div>
@@ -437,31 +470,39 @@
 
     <!-- Password Room Modal -->
     <div id="pw-modal" class="modal-overlay hidden" aria-hidden="true">
-      <div class="modal-content" style="max-width: 380px; padding: 24px;">
-        <div class="modal-header">
-          <h3 id="pw-modal-title" style="margin: 0; font-size: 1.1rem;">New Private Room</h3>
-          <button id="pw-modal-x" class="modal-close-icon" type="button" aria-label="Close modal">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      <div class="modal-content pw-modal-content">
+        <div class="pw-modal-header">
+          <div>
+            <h3 id="pw-modal-title" class="pw-modal-title">New Private Room</h3>
+            <p id="pw-modal-desc" class="pw-modal-subtitle">Optionally protect this room with a client-side password</p>
+          </div>
+          <button id="pw-modal-x" class="notif-close-btn" type="button" aria-label="Close modal" title="Close">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
           </button>
         </div>
-        <p id="pw-modal-desc" style="margin: 4px 0 16px; font-size: 0.82rem; color: var(--muted); line-height: 1.5;">
-          Optionally add a password. Anyone with the correct password can decrypt messages — the server never sees it.
-        </p>
-        <form id="pw-form" onsubmit="event.preventDefault();" style="margin: 0;">
-          <label id="pw-modal-label" style="display: block; font-size: 0.78rem; font-weight: 600; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px;" for="pw-input">Password (optional)</label>
-          <div style="position: relative; margin-bottom: 16px;">
-            <input id="pw-input" type="password" placeholder="Leave blank for random key…" autocomplete="new-password"
-              style="width: 100%; box-sizing: border-box; padding: 10px 40px 10px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 0.9rem; outline: none;" />
-            <button id="pw-toggle" type="button" aria-label="Toggle password visibility"
-              style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--muted); padding: 0; display: flex; align-items: center;">
+        <form id="pw-form" onsubmit="event.preventDefault();" class="pw-form">
+          <label id="pw-modal-label" class="pw-input-label" for="pw-input">Password (optional)</label>
+          <div class="pw-input-wrap">
+            <input id="pw-input" type="password" placeholder="Leave blank for random key…" autocomplete="new-password" class="pw-input-field" />
+            <button id="pw-toggle" type="button" class="pw-toggle-btn" aria-label="Toggle password visibility" title="Toggle visibility">
               <svg id="pw-eye-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
               </svg>
             </button>
           </div>
-          <div style="display: flex; gap: 10px;">
-            <button id="pw-cancel" class="secondary-action" type="button" style="flex: 1;">Cancel</button>
-            <button id="pw-confirm" class="btn-primary" type="button" style="flex: 2;">Create Room</button>
+          <div class="pw-privacy-footnote">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            <span>Zero-knowledge: password never leaves your browser.</span>
+          </div>
+          <div class="pw-actions-row">
+            <button id="pw-cancel" class="pw-cancel-btn" type="button">Cancel</button>
+            <button id="pw-confirm" class="pw-confirm-btn" type="button">Create Room</button>
           </div>
         </form>
       </div>
@@ -469,53 +510,93 @@
 
     <!-- Notification Settings Modal -->
     <div id="notif-settings-modal" class="modal-overlay hidden" aria-hidden="true">
-      <div class="modal-content" style="max-width: 400px; padding: 24px;">
-        <div class="modal-header">
-          <h3 style="margin: 0; font-size: 1.1rem;">🔔 Notification Settings</h3>
-          <button id="notif-modal-x" class="modal-close-icon" type="button" aria-label="Close modal">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      <div class="modal-content notif-modal-content">
+        <div class="notif-modal-header">
+          <div>
+            <h3 class="notif-modal-title">Notifications</h3>
+            <p class="notif-modal-subtitle">Configure message alerts for this device</p>
+          </div>
+          <button id="notif-modal-x" class="notif-close-btn" type="button" aria-label="Close modal" title="Close">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
           </button>
         </div>
-        <p style="margin: 4px 0 16px; font-size: 0.82rem; color: var(--muted); line-height: 1.45;">
-          Control when you receive notifications. Content is never shown — only "New secure message received".
-        </p>
         
-        <div class="notif-settings-group">
-          <label class="notif-setting-row">
-            <span class="notif-setting-info">
-              <span class="notif-setting-title">🌐 Public Rooms</span>
-              <span class="notif-setting-desc">Notify for messages in public rooms</span>
-            </span>
-            <input type="checkbox" id="notif-public" class="toggle-switch">
+        <div class="notif-settings-card">
+          <label class="notif-setting-row" for="notif-public">
+            <div class="notif-row-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="2" y1="12" x2="22" y2="12"/>
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+              </svg>
+            </div>
+            <div class="notif-setting-info">
+              <span class="notif-setting-title">Public Rooms</span>
+              <span class="notif-setting-desc">Alerts for messages in public rooms</span>
+            </div>
+            <input type="checkbox" id="notif-public" class="toggle-switch" aria-label="Public Rooms Notification">
           </label>
           
-          <label class="notif-setting-row">
-            <span class="notif-setting-info">
-              <span class="notif-setting-title">🔒 Private Rooms</span>
-              <span class="notif-setting-desc">Notify for messages in private &amp; password rooms</span>
-            </span>
-            <input type="checkbox" id="notif-private" class="toggle-switch">
+          <label class="notif-setting-row" for="notif-private">
+            <div class="notif-row-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+            </div>
+            <div class="notif-setting-info">
+              <span class="notif-setting-title">Private Rooms</span>
+              <span class="notif-setting-desc">Alerts for password &amp; secret rooms</span>
+            </div>
+            <input type="checkbox" id="notif-private" class="toggle-switch" aria-label="Private Rooms Notification">
           </label>
           
-          <label class="notif-setting-row">
-            <span class="notif-setting-info">
-              <span class="notif-setting-title">📳 Vibration</span>
-              <span class="notif-setting-desc">Vibrate on notification</span>
-            </span>
-            <input type="checkbox" id="notif-vibrate" class="toggle-switch">
+          <label class="notif-setting-row" for="notif-vibrate">
+            <div class="notif-row-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 8a3 3 0 0 1 0 8"/>
+                <path d="M21 5a6 6 0 0 1 0 14"/>
+                <path d="M6 8a3 3 0 0 0 0 8"/>
+                <path d="M3 5a6 6 0 0 0 0 14"/>
+                <rect x="9" y="4" width="6" height="16" rx="2"/>
+              </svg>
+            </div>
+            <div class="notif-setting-info">
+              <span class="notif-setting-title">Vibration</span>
+              <span class="notif-setting-desc">Haptic feedback on mobile devices</span>
+            </div>
+            <input type="checkbox" id="notif-vibrate" class="toggle-switch" aria-label="Vibration">
           </label>
           
-          <label class="notif-setting-row">
-            <span class="notif-setting-info">
-              <span class="notif-setting-title">🔔 Sound</span>
-              <span class="notif-setting-desc">Play a ping sound on new messages</span>
-            </span>
-            <input type="checkbox" id="notif-sound" class="toggle-switch">
+          <label class="notif-setting-row" for="notif-sound">
+            <div class="notif-row-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+              </svg>
+            </div>
+            <div class="notif-setting-info">
+              <span class="notif-setting-title">Sound Effects</span>
+              <span class="notif-setting-desc">Play an ambient ping on new messages</span>
+            </div>
+            <input type="checkbox" id="notif-sound" class="toggle-switch" aria-label="Sound alert">
           </label>
         </div>
+
+        <div class="notif-privacy-footnote">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          <span>End-to-end private. Message text is never shown in alerts.</span>
+        </div>
         
-        <div style="display: flex; gap: 10px; margin-top: 16px;">
-          <button id="notif-settings-close" class="btn-primary" type="button" style="flex: 1;">Done</button>
+        <div class="notif-modal-actions">
+          <button id="notif-settings-close" class="notif-done-btn" type="button">Done</button>
         </div>
       </div>
     </div>
@@ -524,9 +605,9 @@
     <div id="qr-scanner-modal" class="modal-overlay hidden" aria-hidden="true">
       <div class="modal-content qr-scanner-content">
         <div class="modal-header" style="margin-bottom: 6px;">
-          <h3 style="margin: 0; font-size: 1.1rem;">📷 Scan QR Code</h3>
-          <button id="close-qr-scanner-x" class="modal-close-icon" type="button" aria-label="Close modal">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          <h3 style="margin: 0; font-size: 1.05rem; font-weight: 600;">Scan QR Code</h3>
+          <button id="close-qr-scanner-x" class="notif-close-btn" type="button" aria-label="Close modal" title="Close">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
         <p style="margin: 0 0 16px; font-size: 0.78rem; color: var(--muted);">Point your camera at a Shareli QR code</p>
@@ -536,7 +617,7 @@
           <div id="qr-scanner-status" class="qr-scanner-status">Initializing camera...</div>
         </div>
         <div style="display: flex; gap: 10px; margin-top: 16px;">
-          <button id="close-qr-scanner" class="btn-primary" type="button" style="flex: 1;">Cancel</button>
+          <button id="close-qr-scanner" class="pw-cancel-btn" type="button" style="flex: 1;">Cancel</button>
         </div>
       </div>
     </div>
@@ -547,7 +628,9 @@
       <div class="broadcast-popup-content">
         <div class="broadcast-popup-header">
           <div class="broadcast-badge-group">
-            <span class="broadcast-icon-wrap">📢</span>
+            <span class="broadcast-icon-wrap" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            </span>
             <span class="broadcast-tag">SYSTEM BROADCAST</span>
             <span class="broadcast-live-dot" title="Live Announcement"></span>
           </div>
@@ -592,7 +675,13 @@
         <div class="message-meta">
           <span class="avatar"></span>
           <div class="meta-text">
-            <strong class="author"></strong>
+            <div class="author-row">
+              <strong class="author"></strong>
+              <span class="message-pinned-badge hidden" title="Pinned note">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.89A2 2 0 0 1 15 10.77V6a3 3 0 0 0-6 0v4.77a2 2 0 0 1-1.11 1.79l-1.78.89A2 2 0 0 0 5 15.24z"/></svg>
+                <span>Pinned</span>
+              </span>
+            </div>
             <time class="timestamp"></time>
           </div>
           <div class="message-options-menu">
@@ -610,7 +699,7 @@
             </button>
             <div class="msg-dropdown hidden">
               <button class="reply-message" type="button">Reply</button>
-              <button class="pin-message" type="button">Pin</button>
+              <button class="pin-message" type="button" title="Pin note to top" aria-label="Pin note to top">Pin</button>
               <button class="copy-message" type="button" data-default-label="Copy text">Copy text</button>
               <button class="copy-image-action hidden" type="button" data-default-label="Copy image">Copy image</button>
               <button class="share-attachment-action hidden" type="button" data-default-label="Share via...">Share via...</button>
@@ -644,7 +733,7 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
-    <script src="/app.js?v=34" defer></script>
+    <script src="/app.js?v=41" defer></script>
 
     <!-- FAQPage Schema for Google Rich Results -->
     <script type="application/ld+json">

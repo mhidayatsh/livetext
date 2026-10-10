@@ -183,6 +183,7 @@ function getRoom(roomId, adminToken = null, authHash = null) {
       id,
       messages: [],
       typingDrafts: new Map(),
+      pinnedMessageIds: [],
       pinnedMessageId: null,
       adminToken: adminToken || null,
       authHash: authHash || null,
@@ -270,11 +271,30 @@ function broadcastUpdateMessage(room, message) {
 }
 
 function broadcastDeleteMessage(room, messageId) {
-  broadcastToRoom(room.id, { type: "deleteMessage", messageId, pinnedMessageId: room.pinnedMessageId });
+  if (Array.isArray(room.pinnedMessageIds)) {
+    room.pinnedMessageIds = room.pinnedMessageIds.filter(id => id !== messageId);
+    room.pinnedMessageId = room.pinnedMessageIds[0] || null;
+  }
+  broadcastToRoom(room.id, {
+    type: "deleteMessage",
+    messageId,
+    pinnedMessageIds: room.pinnedMessageIds || [],
+    pinnedMessageId: room.pinnedMessageId
+  });
 }
 
 function broadcastPin(room) {
-  broadcastToRoom(room.id, { type: "pinMessage", pinnedMessageId: room.pinnedMessageId });
+  if (!Array.isArray(room.pinnedMessageIds)) {
+    room.pinnedMessageIds = room.pinnedMessageId ? [room.pinnedMessageId] : [];
+  }
+  room.pinnedMessageIds = room.pinnedMessageIds.filter(id => room.messages.some(m => m.id === id));
+  room.pinnedMessageId = room.pinnedMessageIds[0] || null;
+
+  broadcastToRoom(room.id, {
+    type: "pinMessage",
+    pinnedMessageIds: room.pinnedMessageIds,
+    pinnedMessageId: room.pinnedMessageId
+  });
 }
 
 function broadcastClearMessages(room) {
@@ -288,15 +308,17 @@ function activeMessages(room) {
 
 function broadcastMessages(room) {
   removeExpiredMessages(room);
-  // Ensure pinned message still exists
-  if (room.pinnedMessageId && !room.messages.find(m => m.id === room.pinnedMessageId)) {
-    room.pinnedMessageId = null;
+  if (!Array.isArray(room.pinnedMessageIds)) {
+    room.pinnedMessageIds = room.pinnedMessageId ? [room.pinnedMessageId] : [];
   }
+  room.pinnedMessageIds = room.pinnedMessageIds.filter(id => room.messages.some(m => m.id === id));
+  room.pinnedMessageId = room.pinnedMessageIds[0] || null;
   
   broadcastToRoom(room.id, {
     type: "messages",
     roomId: room.id,
     messages: activeMessages(room),
+    pinnedMessageIds: room.pinnedMessageIds,
     pinnedMessageId: room.pinnedMessageId,
     serverTime: Date.now()
   });
@@ -385,6 +407,13 @@ function removeExpiredMessages(room) {
 
   while (index >= 0) {
     if (room.messages[index].expiresAt && room.messages[index].expiresAt <= now) {
+      const expiredId = room.messages[index].id;
+      if (Array.isArray(room.pinnedMessageIds)) {
+        room.pinnedMessageIds = room.pinnedMessageIds.filter(id => id !== expiredId);
+        room.pinnedMessageId = room.pinnedMessageIds[0] || null;
+      } else if (room.pinnedMessageId === expiredId) {
+        room.pinnedMessageId = null;
+      }
       room.messages.splice(index, 1);
       removed = true;
     }
@@ -603,15 +632,29 @@ function handleClientAction(client, action) {
   }
 
   if (action.type === "pin") {
+    if (!Array.isArray(room.pinnedMessageIds)) {
+      room.pinnedMessageIds = room.pinnedMessageId ? [room.pinnedMessageId] : [];
+    }
     if (room.messages.some(m => m.id === action.id)) {
-      room.pinnedMessageId = action.id;
+      // Add to front of pinned array, deduplicate
+      room.pinnedMessageIds = [action.id, ...room.pinnedMessageIds.filter(id => id !== action.id)];
+      if (room.pinnedMessageIds.length > 20) {
+        room.pinnedMessageIds = room.pinnedMessageIds.slice(0, 20);
+      }
       broadcastPin(room);
     }
     return;
   }
 
   if (action.type === "unpin") {
-    room.pinnedMessageId = null;
+    if (!Array.isArray(room.pinnedMessageIds)) {
+      room.pinnedMessageIds = room.pinnedMessageId ? [room.pinnedMessageId] : [];
+    }
+    if (action.id) {
+      room.pinnedMessageIds = room.pinnedMessageIds.filter(id => id !== action.id);
+    } else {
+      room.pinnedMessageIds.shift();
+    }
     broadcastPin(room);
     return;
   }
@@ -623,6 +666,7 @@ function handleClientAction(client, action) {
     if (room.messages.length === 0) return;
 
     room.messages.length = 0;
+    room.pinnedMessageIds = [];
     room.pinnedMessageId = null;
     broadcastClearMessages(room);
   }
@@ -705,6 +749,7 @@ function serveFile(req, res) {
           const room = rooms.get(targetRoom);
           if (room && room.messages.length > 0) {
             room.messages.length = 0;
+            room.pinnedMessageIds = [];
             room.pinnedMessageId = null;
             broadcastToRoom(targetRoom, { type: "clearMessages" });
             successMsg = "cleared";
@@ -1558,7 +1603,8 @@ server.on("upgrade", (req, socket) => {
     roomId: room.id,
     name: client.name,
     drafts: activeTypingDrafts(room),
-    pinnedMessageId: room.pinnedMessageId,
+    pinnedMessageIds: room.pinnedMessageIds || [],
+    pinnedMessageId: (room.pinnedMessageIds && room.pinnedMessageIds[0]) || room.pinnedMessageId || null,
     serverTime: Date.now(),
     isAdmin: client.isAdmin,
     isDevAdmin: client.isDevAdmin,
