@@ -484,6 +484,8 @@
           </button>
         </div>
         <form id="pw-form" onsubmit="event.preventDefault();" class="pw-form">
+          <!-- Hidden username field for Chrome accessibility & password manager compliance -->
+          <input type="text" name="username" autocomplete="username" style="display:none;" aria-hidden="true" value="room-guest" tabindex="-1" />
           <label id="pw-modal-label" class="pw-input-label" for="pw-input">Password (optional)</label>
           <div class="pw-input-wrap">
             <input id="pw-input" type="password" placeholder="Leave blank for random key…" autocomplete="new-password" class="pw-input-field" />

@@ -1626,8 +1626,18 @@ async function triggerAttachmentDownload(attachmentData) {
   }
 }
 
+let isShareInProgress = false;
+
 async function shareFileAttachment(attachmentData, button = null) {
   if (!attachmentData || !attachmentData.data) return false;
+
+  // Prevent duplicate concurrent share dialogs (avoids InvalidStateError)
+  if (isShareInProgress) return false;
+  isShareInProgress = true;
+
+  if (button) {
+    button.style.pointerEvents = "none";
+  }
 
   try {
     let blob = null;
@@ -1655,7 +1665,9 @@ async function shareFileAttachment(attachmentData, button = null) {
         });
         return true;
       } catch (shareErr) {
-        if (shareErr.name === "AbortError") return false; // User closed share menu
+        if (shareErr.name === "AbortError" || shareErr.name === "InvalidStateError") {
+          return false; // User closed share menu or an earlier share is still active
+        }
         // Retry without text in case the target app only accepts pure files
         try {
           await navigator.share({
@@ -1664,7 +1676,9 @@ async function shareFileAttachment(attachmentData, button = null) {
           });
           return true;
         } catch (retryErr) {
-          if (retryErr.name === "AbortError") return false;
+          if (retryErr.name === "AbortError" || retryErr.name === "InvalidStateError") {
+            return false;
+          }
           throw retryErr;
         }
       }
@@ -1676,11 +1690,21 @@ async function shareFileAttachment(attachmentData, button = null) {
     showToast("Direct sharing is not supported on this browser. File downloaded — you can now attach and send it directly!", 4500);
     return true;
   } catch (err) {
-    if (err.name === "AbortError") return false; // User closed system share sheet
+    if (err.name === "AbortError" || err.name === "InvalidStateError") {
+      return false; // Silent ignore when user dismisses or earlier share is resolving
+    }
     console.warn("System share error:", err);
     await triggerAttachmentDownload(attachmentData);
     showToast("Direct sharing failed on this device. File downloaded to your device so you can share it manually.", 4500);
     return false;
+  } finally {
+    // Brief cooldown delay to allow OS share sheet to fully settle
+    setTimeout(() => {
+      isShareInProgress = false;
+      if (button) {
+        button.style.pointerEvents = "";
+      }
+    }, 350);
   }
 }
 
@@ -3376,6 +3400,8 @@ const webShareBtn = document.getElementById('web-share-btn');
 if (webShareBtn && navigator.share) {
   webShareBtn.style.display = '';
   webShareBtn.addEventListener('click', async () => {
+    if (isShareInProgress) return;
+    isShareInProgress = true;
     const shareUrl = (roomLink && roomLink.value) ? roomLink.value : window.location.href;
     try {
       await navigator.share({
@@ -3384,9 +3410,11 @@ if (webShareBtn && navigator.share) {
         url: shareUrl
       });
     } catch (err) {
-      if (err.name !== 'AbortError') {
+      if (err.name !== 'AbortError' && err.name !== 'InvalidStateError') {
         copyText(shareUrl, webShareBtn);
       }
+    } finally {
+      setTimeout(() => { isShareInProgress = false; }, 350);
     }
   });
 }
