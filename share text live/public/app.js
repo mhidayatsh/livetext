@@ -707,7 +707,11 @@ function forceReconnect(reason = "auto") {
     s.onerror = null;
     s.onclose = null;
     try {
-      s.close();
+      if (s.readyState === WebSocket.OPEN) {
+        s.close(1000, "force_reconnect");
+      } else {
+        s.close();
+      }
     } catch (e) {}
   }
 
@@ -1401,15 +1405,21 @@ function send(payload) {
 }
 
 async function waitForConnection(timeoutMs = 8000) {
-  if (socket && socket.readyState === WebSocket.OPEN && isConnected) {
+  const isHealthy = socket &&
+                    socket.readyState === WebSocket.OPEN &&
+                    isConnected &&
+                    (Date.now() - lastPongTime <= 25000);
+
+  if (isHealthy) {
     return true;
   }
-  if (!socket || socket.readyState === WebSocket.CLOSED || socket.readyState === WebSocket.CLOSING || !isConnected) {
-    forceReconnect("waitForConnection");
-  }
+
+  // Socket is closed, disconnected, or has timed out on heartbeat (zombie)
+  forceReconnect("waitForConnection");
+
   const startTime = Date.now();
   while (Date.now() - startTime < timeoutMs) {
-    if (socket && socket.readyState === WebSocket.OPEN && isConnected) {
+    if (socket && socket.readyState === WebSocket.OPEN && isConnected && (Date.now() - lastPongTime <= 25000)) {
       return true;
     }
     await new Promise(r => setTimeout(r, 100));
@@ -1869,6 +1879,12 @@ function updateCountdowns() {
     const label = card.querySelector(".expires-label");
     const bar = card.querySelector(".expiry-bar span");
 
+    if (card.classList.contains("is-failed")) {
+      if (label) label.textContent = "Failed";
+      if (bar) bar.style.width = "0%";
+      continue;
+    }
+
     if (card.classList.contains("is-pending")) {
       if (label) label.textContent = "Sending...";
       if (bar) bar.style.width = "100%";
@@ -1911,6 +1927,58 @@ function updateCountdowns() {
         }, 350);
       }
     }
+  }
+}
+
+async function retryPendingMessage(messageId) {
+  const msg = messages.find(m => m.id === messageId);
+  if (!msg || msg.isRetrying) return;
+  msg.isRetrying = true;
+
+  try {
+    msg.isFailed = false;
+    msg.isPending = true;
+    pendingMessages.set(messageId, msg);
+    renderMessages();
+
+    const connected = await waitForConnection(6000);
+    if (!connected) {
+      msg.isFailed = true;
+      msg.isPending = false;
+      renderMessages();
+      showToast("⚠️ Could not connect to send note.");
+      return;
+    }
+
+    const encryptedText = await encryptText(msg.text);
+    const payload = {
+      type: "create",
+      text: encryptedText,
+      expiresInMs: Number(expirySelect ? expirySelect.value : 0)
+    };
+    if (msg.replyTo) {
+      payload.replyTo = msg.replyTo;
+    }
+
+    if (!send(payload)) {
+      msg.isFailed = true;
+      msg.isPending = false;
+      renderMessages();
+      showToast("⚠️ Could not deliver note.");
+      return;
+    }
+
+    setTimeout(() => {
+      if (!pendingMessages.has(messageId)) return;
+      const pendingMsg = pendingMessages.get(messageId);
+      if (pendingMsg) {
+        pendingMsg.isFailed = true;
+        pendingMsg.isPending = false;
+        renderMessages();
+      }
+    }, 18000);
+  } finally {
+    delete msg.isRetrying;
   }
 }
 
@@ -1993,6 +2061,36 @@ function renderMessages() {
       const msgUpdatedAt = String(message.updatedAt || message.createdAt || "");
       if (existingNode.dataset.updatedAt === msgUpdatedAt) {
         existingNode.classList.toggle("is-pending", !!message.isPending);
+        existingNode.classList.toggle("is-failed", !!message.isFailed);
+
+        if (message.isPending) {
+          existingNode.style.opacity = "0.55";
+          existingNode.style.pointerEvents = "none";
+          existingNode.title = "Sending…";
+        } else {
+          existingNode.style.pointerEvents = "";
+        }
+
+        if (message.isFailed) {
+          existingNode.style.opacity = "0.85";
+          existingNode.style.outline = "1.5px solid #ef4444";
+          existingNode.style.borderRadius = "10px";
+          existingNode.title = "Failed to send";
+          if (!existingNode.querySelector(".fail-badge")) {
+            const failBadge = document.createElement("div");
+            failBadge.className = "fail-badge";
+            failBadge.style.cssText = "font-size:0.75rem;color:#ef4444;margin-top:6px;display:flex;align-items:center;gap:6px;cursor:pointer;";
+            failBadge.innerHTML = `⚠️ Not delivered. <span style="text-decoration:underline;font-weight:600;">Tap to retry</span>`;
+            failBadge.addEventListener("click", () => retryPendingMessage(message.id));
+            existingNode.querySelector(".message-text")?.after(failBadge);
+          }
+        } else if (!message.isPending) {
+          existingNode.style.opacity = "";
+          existingNode.style.outline = "";
+          existingNode.title = "";
+          existingNode.querySelector(".fail-badge")?.remove();
+        }
+
         continue;
       }
     }
@@ -2082,14 +2180,16 @@ function renderMessages() {
       node.title = "Sending…";
     }
     if (message.isFailed) {
-      node.style.opacity = "0.75";
+      node.classList.add("is-failed");
+      node.style.opacity = "0.85";
       node.style.outline = "1.5px solid #ef4444";
       node.style.borderRadius = "10px";
       node.title = "Failed to send";
-      // Add a small retry indicator
       const failBadge = document.createElement("div");
-      failBadge.style.cssText = "font-size:0.72rem;color:#ef4444;margin-top:4px;cursor:default;";
-      failBadge.textContent = "⚠️ Not delivered — check your connection";
+      failBadge.className = "fail-badge";
+      failBadge.style.cssText = "font-size:0.75rem;color:#ef4444;margin-top:6px;display:flex;align-items:center;gap:6px;cursor:pointer;";
+      failBadge.innerHTML = `⚠️ Not delivered. <span style="text-decoration:underline;font-weight:600;">Tap to retry</span>`;
+      failBadge.addEventListener("click", () => retryPendingMessage(message.id));
       node.querySelector(".message-text")?.after(failBadge);
     }
     author.textContent = message.authorName || "Guest";
@@ -2912,7 +3012,7 @@ async function sendSingleFile(file, replyToId = null) {
       msg.isPending = false;
       renderMessages();
     }
-  }, 60000);
+  }, 25000);
 
   return true;
 }
@@ -3824,7 +3924,7 @@ messageForm.addEventListener("submit", async (event) => {
       msg.isPending = false;
       renderMessages();
     }
-  }, 60000);
+  }, 18000);
 
   // Reset UI immediately — user can type the next message
   messageInput.value = "";
@@ -4027,7 +4127,7 @@ async function startVoiceRecording() {
         msg.isPending = false;
         renderMessages();
       }
-    }, 60000);
+    }, 25000);
 
     shareButton.innerHTML = originalBtnContent;
     shareButton.disabled = false;
@@ -4575,29 +4675,35 @@ window.addEventListener("offline", () => {
   showToast("You are currently offline. Will reconnect automatically once online.", 3200);
 });
 
+let lastResumeCheck = 0;
+function checkAndRecoverConnection(reason) {
+  const now = Date.now();
+  // Prevent duplicate concurrent reconnect storms when visibilitychange and focus fire simultaneously
+  if (now - lastResumeCheck < 1500) return;
+  lastResumeCheck = now;
+
+  const isConnecting = socket && socket.readyState === WebSocket.CONNECTING;
+  if (isConnecting) return;
+
+  const isStale = !socket ||
+                  socket.readyState !== WebSocket.OPEN ||
+                  !isConnected ||
+                  (now - lastPongTime > 25000);
+  if (isStale) {
+    console.log(`[Shareli] ${reason}: connection was not healthy. Reconnecting...`);
+    forceReconnect(reason);
+  }
+}
+
 // Auto-reconnect on mobile tab resume / focus (e.g. returning from lock screen, other tabs, file picker)
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") {
-    const isStale = !socket ||
-                    socket.readyState !== WebSocket.OPEN ||
-                    !isConnected ||
-                    (Date.now() - lastPongTime > 25000);
-    if (isStale) {
-      console.log("[Shareli] Tab became visible and connection was not healthy. Reconnecting...");
-      forceReconnect("tab_visible");
-    }
+    checkAndRecoverConnection("tab_visible");
   }
 });
 
 window.addEventListener("focus", () => {
-  const isStale = !socket ||
-                  socket.readyState !== WebSocket.OPEN ||
-                  !isConnected ||
-                  (Date.now() - lastPongTime > 25000);
-  if (isStale) {
-    console.log("[Shareli] Window focused and connection was not healthy. Reconnecting...");
-    forceReconnect("window_focus");
-  }
+  checkAndRecoverConnection("window_focus");
 });
 
 // Periodic background watchdog: check connection health every 15 seconds
