@@ -4928,34 +4928,16 @@ setInterval(() => {
   }
 }, 15000);
 
-// Register Service Worker for PWA + Notifications
+// Register Service Worker for PWA + Notifications + Web Share Target
 if ('serviceWorker' in navigator) {
-  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    // Development environment: unregister all service workers and clear caches so localhost always loads live code
-    navigator.serviceWorker.getRegistrations().then((registrations) => {
-      for (const registration of registrations) {
-        registration.unregister();
-        console.log('Unregistered localhost service worker:', registration.scope);
-      }
+  navigator.serviceWorker.register('/sw.js')
+    .then((registration) => {
+      registration.update();
+      console.log('ServiceWorker registered:', registration.scope);
+    })
+    .catch((err) => {
+      console.warn('ServiceWorker registration failed:', err);
     });
-    if ('caches' in window) {
-      caches.keys().then((names) => {
-        for (const name of names) {
-          caches.delete(name);
-        }
-      });
-    }
-  } else {
-    // Production environment: register service worker with update check
-    navigator.serviceWorker.register('/sw.js')
-      .then((registration) => {
-        registration.update();
-        console.log('ServiceWorker registered:', registration.scope);
-      })
-      .catch((err) => {
-        console.warn('ServiceWorker registration failed:', err);
-      });
-  }
 }
 
 // Check for shared content from Web Share Target API

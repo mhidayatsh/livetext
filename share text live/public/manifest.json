@@ -1,8 +1,10 @@
 {
+  "id": "/",
   "name": "Shareli - Secure Live Text & File Sharing",
   "short_name": "Shareli",
   "description": "Instantly share encrypted messages, code, and large files. No account needed.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0d0d12",
   "theme_color": "#6366f1",
@@ -19,12 +21,11 @@
           "name": "files",
           "accept": [
             "image/*",
+            "video/*",
+            "audio/*",
             "text/*",
             "application/pdf",
-            "application/zip",
-            "application/*",
-            "audio/*",
-            "video/*"
+            "application/zip"
           ]
         }
       ]

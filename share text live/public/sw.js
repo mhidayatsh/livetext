@@ -46,10 +46,6 @@ self.addEventListener('activate', (event) => {
   );
   // Ensure that the new service worker takes control immediately across all tabs.
   self.clients.claim();
-  // On localhost, self-unregister to ensure development changes are always live
-  if (self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1') {
-    self.registration.unregister();
-  }
 });
 
 // Fetch Event: Smart routing
