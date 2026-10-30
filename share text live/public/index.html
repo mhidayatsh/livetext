@@ -66,7 +66,7 @@
     <!-- QRCode.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
     
-    <link rel="stylesheet" href="/styles.css?v=42" />
+    <link rel="stylesheet" href="/styles.css?v=43" />
     
     <!-- App Icons / Favicons (Google Search & Browsers) -->
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
@@ -483,7 +483,7 @@
             </svg>
           </button>
         </div>
-        <form id="pw-form" onsubmit="event.preventDefault();" class="pw-form">
+        <form id="pw-form" class="pw-form">
           <!-- Hidden username field for Chrome accessibility & password manager compliance -->
           <input type="text" name="username" autocomplete="username" style="display:none;" aria-hidden="true" value="room-guest" tabindex="-1" />
           <label id="pw-modal-label" class="pw-input-label" for="pw-input">Password (optional)</label>
@@ -684,7 +684,14 @@
                 <span>Pinned</span>
               </span>
             </div>
-            <time class="timestamp"></time>
+            <div class="meta-subrow">
+              <time class="timestamp"></time>
+              <span class="meta-dot" aria-hidden="true">•</span>
+              <span class="message-seen-badge" title="Total viewers" aria-label="Viewer count">
+                <svg class="seen-icon eye-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <span class="seen-count">1</span>
+              </span>
+            </div>
           </div>
           <div class="message-options-menu">
             <button class="quick-copy-btn icon-button hidden" aria-label="Copy text" title="Copy text">
@@ -735,7 +742,7 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
-    <script src="/app.js?v=42" defer></script>
+    <script src="/app.js?v=43" defer></script>
 
     <!-- FAQPage Schema for Google Rich Results -->
     <script type="application/ld+json">

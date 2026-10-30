@@ -262,12 +262,31 @@ function broadcastPresence(roomId) {
   });
 }
 
+function formatMessageForClient(message) {
+  const seenCount = message.seenBy instanceof Set ? message.seenBy.size : (typeof message.seenCount === 'number' ? message.seenCount : 1);
+  return {
+    id: message.id,
+    text: message.text,
+    authorId: message.authorId,
+    authorName: message.authorName,
+    authorColor: message.authorColor,
+    isDevAdmin: message.isDevAdmin || false,
+    replyTo: message.replyTo || null,
+    createdAt: message.createdAt,
+    updatedAt: message.updatedAt || message.createdAt,
+    expiresAt: message.expiresAt,
+    editorId: message.editorId,
+    editorName: message.editorName,
+    seenCount: seenCount
+  };
+}
+
 function broadcastNewMessage(room, message) {
-  broadcastToRoom(room.id, { type: "newMessage", message });
+  broadcastToRoom(room.id, { type: "newMessage", message: formatMessageForClient(message) });
 }
 
 function broadcastUpdateMessage(room, message) {
-  broadcastToRoom(room.id, { type: "updateMessage", message });
+  broadcastToRoom(room.id, { type: "updateMessage", message: formatMessageForClient(message) });
 }
 
 function broadcastDeleteMessage(room, messageId) {
@@ -303,7 +322,9 @@ function broadcastClearMessages(room) {
 
 function activeMessages(room) {
   const now = Date.now();
-  return room.messages.filter((message) => !message.expiresAt || message.expiresAt > now);
+  return room.messages
+    .filter((message) => !message.expiresAt || message.expiresAt > now)
+    .map(formatMessageForClient);
 }
 
 function broadcastMessages(room) {
@@ -559,7 +580,8 @@ function handleClientAction(client, action) {
       replyTo: action.replyTo ? String(action.replyTo).slice(0, 36) : null,
       createdAt,
       updatedAt: createdAt,
-      expiresAt: expiresInMs === 0 ? createdAt + 6 * 60 * 60 * 1000 : createdAt + expiresInMs
+      expiresAt: expiresInMs === 0 ? createdAt + 6 * 60 * 60 * 1000 : createdAt + expiresInMs,
+      seenBy: new Set([client.id])
     };
 
     room.messages.push(message);
@@ -669,6 +691,45 @@ function handleClientAction(client, action) {
     room.pinnedMessageIds = [];
     room.pinnedMessageId = null;
     broadcastClearMessages(room);
+    return;
+  }
+
+  if (action.type === "seen") {
+    // Anti-Spam: Lightweight rate limiter for seen actions (max 10 per 5s per client)
+    const SEEN_RATE_WINDOW_MS = 5000;
+    const SEEN_RATE_MAX = 10;
+    client.seenTimestamps = (client.seenTimestamps || []).filter(t => now - t < SEEN_RATE_WINDOW_MS);
+    if (client.seenTimestamps.length >= SEEN_RATE_MAX) {
+      return; // Silently drop excessive seen reports
+    }
+    client.seenTimestamps.push(now);
+
+    const rawIds = Array.isArray(action.ids) ? action.ids : (action.id ? [action.id] : []);
+    // Cap batch size to prevent oversized payloads
+    const cappedIds = rawIds.slice(0, 50);
+    const updates = [];
+    for (const rawId of cappedIds) {
+      if (typeof rawId !== "string") continue;
+      const targetId = rawId.slice(0, 36);
+      const msg = room.messages.find(m => m.id === targetId);
+      if (msg) {
+        if (!(msg.seenBy instanceof Set)) {
+          msg.seenBy = new Set([msg.authorId]);
+        }
+        if (!msg.seenBy.has(client.id)) {
+          msg.seenBy.add(client.id);
+          updates.push({ id: msg.id, seenCount: msg.seenBy.size });
+        }
+      }
+    }
+    if (updates.length > 0) {
+      broadcastToRoom(room.id, {
+        type: "messagesSeen",
+        roomId: room.id,
+        updates: updates
+      });
+    }
+    return;
   }
 }
 
@@ -717,6 +778,13 @@ function serveFile(req, res) {
   if (requestedPath === "/health" || requestedPath === "/ping") {
     res.writeHead(200, { 'Content-Type': mimeTypes['.txt'], ...SECURITY_HEADERS });
     res.end("OK");
+    return;
+  }
+
+  // Web Share Target API: Redirect fallback for browser native shares
+  if (requestedPath === "/share-target") {
+    res.writeHead(303, { 'Location': '/?shared_target=1', ...SECURITY_HEADERS });
+    res.end();
     return;
   }
 

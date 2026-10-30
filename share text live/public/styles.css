@@ -775,9 +775,54 @@ textarea {
   display: none !important;
 }
 
+.meta-subrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 1px;
+}
+
 .meta-text .timestamp {
   font-size: 0.75rem;
   color: var(--muted);
+}
+
+.meta-dot {
+  color: var(--muted);
+  font-size: 0.75rem;
+  opacity: 0.5;
+  user-select: none;
+}
+
+.message-seen-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3.5px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1px 6px;
+  border-radius: 4px;
+  cursor: default;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.message-seen-badge .seen-icon {
+  flex-shrink: 0;
+  stroke: currentColor;
+  opacity: 0.75;
+}
+
+.message-seen-badge.is-seen-multiple {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.message-seen-badge.is-seen-multiple .seen-icon {
+  opacity: 1;
+  stroke: #10b981;
 }
 
 .message-options-menu {
@@ -2784,6 +2829,20 @@ textarea {
 
 [data-theme="light"] .message-card .timestamp {
   color: #6b7280;
+}
+
+[data-theme="light"] .meta-dot {
+  color: #94a3b8;
+}
+
+[data-theme="light"] .message-seen-badge {
+  background: rgba(0, 0, 0, 0.05);
+  color: #64748b;
+}
+
+[data-theme="light"] .message-seen-badge.is-seen-multiple {
+  background: rgba(16, 185, 129, 0.14);
+  color: #059669;
 }
 
 /* Light mode: Send button */

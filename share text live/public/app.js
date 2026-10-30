@@ -901,6 +901,17 @@ async function connect(options = {}) {
       renderMessages();
       renderPinnedMessage();
     }
+
+    if (payload.type === "messagesSeen") {
+      const updates = Array.isArray(payload.updates) ? payload.updates : [];
+      for (const u of updates) {
+        const msg = messages.find(m => m.id === u.id);
+        if (msg) {
+          msg.seenCount = u.seenCount;
+        }
+        updateMessageSeenCountUi(u.id, u.seenCount);
+      }
+    }
     
     if (payload.type === "deleteMessage") {
       messages = messages.filter(m => m.id !== payload.messageId);
@@ -1116,6 +1127,8 @@ function switchRoom(roomId, options = {}) {
   clientId = "";
   pinnedMessageIds = [];
   currentPinnedIndex = 0;
+  reportedSeenIds.clear();
+  pendingSeenBatch.clear();
   setReplyingTo(null);
   clearAttachment();
   messageInput.value = "";
@@ -1982,6 +1995,164 @@ async function retryPendingMessage(messageId) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  DELIVERY & SEEN RECEIPTS (TOTAL VIEWER COUNT)
+// ═══════════════════════════════════════════════════════════════
+const reportedSeenIds = new Set();
+let pendingSeenBatch = new Set();
+let seenBatchTimer = null;
+
+function flushSeenBatch() {
+  if (seenBatchTimer) {
+    clearTimeout(seenBatchTimer);
+    seenBatchTimer = null;
+  }
+  if (pendingSeenBatch.size === 0 || !isConnected) return;
+  const idsToSend = Array.from(pendingSeenBatch);
+  pendingSeenBatch.clear();
+  send({ type: "seen", ids: idsToSend });
+}
+
+function queueMessageSeen(messageId) {
+  if (!messageId || reportedSeenIds.has(messageId)) return;
+  reportedSeenIds.add(messageId);
+  pendingSeenBatch.add(messageId);
+  if (!seenBatchTimer) {
+    seenBatchTimer = setTimeout(flushSeenBatch, 300);
+  }
+}
+
+function updateMessageSeenCountUi(messageId, count) {
+  const card = messagesEl ? messagesEl.querySelector(`.message-card[data-message-id="${messageId}"]`) : null;
+  if (!card) return;
+  const badge = card.querySelector(".message-seen-badge");
+  const countEl = card.querySelector(".seen-count");
+  const num = Number(count) || 1;
+  if (countEl) countEl.textContent = num;
+  if (badge) {
+    const isMultiple = num > 1;
+    badge.classList.toggle("is-seen-multiple", isMultiple);
+    badge.title = isMultiple ? `Viewed by ${num} people` : `Viewed by 1 person`;
+    badge.setAttribute("aria-label", `Viewed by ${num} people`);
+  }
+}
+
+let messageSeenObserver = null;
+if (typeof IntersectionObserver !== "undefined") {
+  messageSeenObserver = new IntersectionObserver((entries) => {
+    if (document.hidden) return;
+    for (const entry of entries) {
+      if (entry.isIntersecting) {
+        const id = entry.target.dataset.messageId;
+        const authorId = entry.target.dataset.authorId;
+        if (id && authorId !== clientId) {
+          queueMessageSeen(id);
+          messageSeenObserver.unobserve(entry.target);
+        }
+      }
+    }
+  }, { threshold: 0.15 });
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && isConnected) {
+    const cards = messagesEl ? messagesEl.querySelectorAll(".message-card") : [];
+    for (const card of cards) {
+      const id = card.dataset.messageId;
+      const authorId = card.dataset.authorId;
+      if (id && authorId !== clientId && !reportedSeenIds.has(id)) {
+        const rect = card.getBoundingClientRect();
+        if (rect.top < window.innerHeight && rect.bottom > 0) {
+          queueMessageSeen(id);
+        }
+      }
+    }
+    flushSeenBatch();
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  WEB SHARE TARGET API (PWA NATIVE SHARING)
+// ═══════════════════════════════════════════════════════════════
+function getAndClearSharedPayload() {
+  return new Promise((resolve) => {
+    if (typeof indexedDB === 'undefined') return resolve(null);
+    try {
+      const req = indexedDB.open('shareli_share_target', 1);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('shared_data')) {
+          db.createObjectStore('shared_data', { keyPath: 'id' });
+        }
+      };
+      req.onsuccess = (e) => {
+        const db = e.target.result;
+        const tx = db.transaction('shared_data', 'readwrite');
+        const store = tx.objectStore('shared_data');
+        const getReq = store.get('latest_share');
+        getReq.onsuccess = () => {
+          const data = getReq.result;
+          if (data) {
+            store.delete('latest_share');
+          }
+          resolve(data || null);
+        };
+        getReq.onerror = () => resolve(null);
+        tx.oncomplete = () => db.close();
+      };
+      req.onerror = () => resolve(null);
+    } catch (e) {
+      resolve(null);
+    }
+  });
+}
+
+async function checkWebShareTarget() {
+  const params = new URLSearchParams(window.location.search);
+  const isSharedTarget = params.get('shared_target') || params.get('shared');
+  const paramText = params.get('text') || params.get('shared_text');
+  const paramUrl = params.get('url') || params.get('shared_url');
+  const paramTitle = params.get('title') || params.get('shared_title');
+
+  let importedText = [paramTitle, paramText, paramUrl].filter(Boolean).join('\n').trim();
+
+  try {
+    const sharedData = await getAndClearSharedPayload();
+    if (sharedData) {
+      if (Array.isArray(sharedData.files) && sharedData.files.length > 0) {
+        if (sharedData.files.length === 1) {
+          await processFile(sharedData.files[0]);
+        } else {
+          await sendMultipleFiles(sharedData.files);
+        }
+        showToast(`📎 Shared ${sharedData.files.length} file(s) imported!`);
+      }
+
+      const textParts = [sharedData.title, sharedData.text, sharedData.url].filter(Boolean).join('\n').trim();
+      if (textParts) {
+        importedText = importedText ? `${importedText}\n${textParts}` : textParts;
+      }
+    }
+  } catch (err) {
+    console.warn("Share target processing error:", err);
+  }
+
+  if (importedText) {
+    if (messageInput) {
+      messageInput.value = messageInput.value ? `${messageInput.value}\n${importedText}` : importedText;
+      updateSendState();
+      messageInput.focus();
+    }
+    showToast("📥 Shared content imported!");
+  }
+
+  if (isSharedTarget || paramText || paramUrl || paramTitle) {
+    const cleanUrl = new URL(window.location.href);
+    ['shared_target', 'shared', 'text', 'url', 'title', 'shared_text', 'shared_url', 'shared_title'].forEach(p => cleanUrl.searchParams.delete(p));
+    window.history.replaceState(null, '', cleanUrl.pathname + cleanUrl.search + cleanUrl.hash);
+  }
+}
+
 function renderMessages() {
   const now = nowFromServerClock();
   messages = messages.filter(m => !m.expiresAt || m.expiresAt > now);
@@ -2058,6 +2229,24 @@ function renderMessages() {
         existingPinBtn.setAttribute("aria-label", isPinned ? "Unpin this note" : "Pin note to top");
       }
 
+      const seenBadge = existingNode.querySelector(".message-seen-badge");
+      const seenCountEl = existingNode.querySelector(".seen-count");
+      const count = Number(message.seenCount) || 1;
+      if (seenCountEl) seenCountEl.textContent = count;
+      if (seenBadge) {
+        const isMultiple = count > 1;
+        seenBadge.classList.toggle("is-seen-multiple", isMultiple);
+        seenBadge.title = isMultiple ? `Viewed by ${count} people` : `Viewed by 1 person`;
+        seenBadge.setAttribute("aria-label", `Viewed by ${count} people`);
+      }
+      if (message.authorId !== clientId && message.id && !reportedSeenIds.has(message.id)) {
+        if (messageSeenObserver) {
+          messageSeenObserver.observe(existingNode);
+        } else {
+          queueMessageSeen(message.id);
+        }
+      }
+
       const msgUpdatedAt = String(message.updatedAt || message.createdAt || "");
       if (existingNode.dataset.updatedAt === msgUpdatedAt) {
         existingNode.classList.toggle("is-pending", !!message.isPending);
@@ -2125,8 +2314,20 @@ function renderMessages() {
     avatar.style.background = /^#(?:[0-9a-fA-F]{3}){1,2}$|^hsl\(\s*\d+(?:deg)?[\s,]+\d+%[\s,]+\d+%\s*\)$/.test(mColor) ? mColor : "#6366f1";
     node.dataset.createdAt = message.createdAt;
     node.dataset.messageId = message.id;
+    node.dataset.authorId = message.authorId || "";
     node.dataset.expiresAt = message.expiresAt || "";
     node.dataset.updatedAt = message.updatedAt || message.createdAt || "";
+
+    const seenBadge = node.querySelector(".message-seen-badge");
+    const seenCountEl = node.querySelector(".seen-count");
+    const count = Number(message.seenCount) || 1;
+    if (seenCountEl) seenCountEl.textContent = count;
+    if (seenBadge) {
+      const isMultiple = count > 1;
+      seenBadge.classList.toggle("is-seen-multiple", isMultiple);
+      seenBadge.title = isMultiple ? `Viewed by ${count} people` : `Viewed by 1 person`;
+      seenBadge.setAttribute("aria-label", `Viewed by ${count} people`);
+    }
     
     node.classList.toggle("is-pinned", isPinned);
     const pinnedBadge = node.querySelector(".message-pinned-badge");
@@ -2143,6 +2344,12 @@ function renderMessages() {
     
     if (isOwnMessage) {
       node.classList.add("is-own");
+    } else if (message.id && !reportedSeenIds.has(message.id)) {
+      if (messageSeenObserver) {
+        messageSeenObserver.observe(node);
+      } else {
+        queueMessageSeen(message.id);
+      }
     }
     
     if (!isOwnMessage) {
@@ -3646,6 +3853,12 @@ if (pwToggle && pwInput) {
   });
 }
 
+// Prevent default submit on password modal form without inline HTML handler (CSP compliant)
+const pwForm = document.getElementById("pw-form");
+if (pwForm) {
+  pwForm.addEventListener("submit", (e) => e.preventDefault());
+}
+
 // --- First-visit hint badge for "New private" button ---
 (function initHintBadge() {
   if (!newRoomButton) return;
@@ -4744,3 +4957,9 @@ if ('serviceWorker' in navigator) {
       });
   }
 }
+
+// Check for shared content from Web Share Target API
+if (typeof checkWebShareTarget === "function") {
+  checkWebShareTarget();
+}
+

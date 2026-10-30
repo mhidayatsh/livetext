@@ -1,9 +1,9 @@
-const CACHE_NAME = 'shareli-cache-v42';
+const CACHE_NAME = 'shareli-cache-v43';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
-  '/styles.css?v=42',
-  '/app.js?v=42',
+  '/styles.css?v=43',
+  '/app.js?v=43',
   '/styles.css',
   '/app.js',
   '/manifest.json',
@@ -54,7 +54,34 @@ self.addEventListener('activate', (event) => {
 
 // Fetch Event: Smart routing
 self.addEventListener('fetch', (event) => {
-  // We only want to handle GET requests
+  // Web Share Target API: Intercept POST from native OS share sheet (files, text, links)
+  if (event.request.method === 'POST' && event.request.url.includes('/share-target')) {
+    event.respondWith(
+      (async () => {
+        try {
+          const formData = await event.request.formData();
+          const title = formData.get('title') || '';
+          const text = formData.get('text') || '';
+          const url = formData.get('url') || '';
+          const files = formData.getAll('files') || [];
+
+          await saveSharedTargetToDb({
+            title: typeof title === 'string' ? title : '',
+            text: typeof text === 'string' ? text : '',
+            url: typeof url === 'string' ? url : '',
+            files: files.filter(f => f && f.name && f.size > 0),
+            timestamp: Date.now()
+          });
+        } catch (err) {
+          console.error('Share Target error in SW:', err);
+        }
+        return Response.redirect('/?shared_target=1', 303);
+      })()
+    );
+    return;
+  }
+
+  // We only want to handle GET requests for other assets
   if (event.request.method !== 'GET') {
     return;
   }
@@ -156,3 +183,37 @@ self.addEventListener('notificationclick', (event) => {
     })
   );
 });
+
+// Helper: Save shared target payload into IndexedDB for client retrieval
+function saveSharedTargetToDb(data) {
+  return new Promise((resolve) => {
+    if (typeof indexedDB === 'undefined') return resolve();
+    try {
+      const req = indexedDB.open('shareli_share_target', 1);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('shared_data')) {
+          db.createObjectStore('shared_data', { keyPath: 'id' });
+        }
+      };
+      req.onsuccess = (e) => {
+        const db = e.target.result;
+        const tx = db.transaction('shared_data', 'readwrite');
+        const store = tx.objectStore('shared_data');
+        store.put({ id: 'latest_share', ...data });
+        tx.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+        tx.onerror = () => {
+          db.close();
+          resolve();
+        };
+      };
+      req.onerror = () => resolve();
+    } catch (e) {
+      resolve();
+    }
+  });
+}
+
