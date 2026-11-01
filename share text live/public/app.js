@@ -44,6 +44,7 @@ const qrModal = document.querySelector("#qr-modal");
 const closeQrModal = document.querySelector("#close-qr-modal");
 const qrcodeContainer = document.querySelector("#qrcode-container");
 const SPINNER_SVG = `<svg class="btn-spinner" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>`;
+const DEFAULT_SEND_ICON = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`;
 
 // Theme & Notification Elements
 const notifToggle = document.getElementById("notif-toggle");
@@ -92,6 +93,7 @@ const imageInput = document.getElementById("image-input");
 const attachmentPreview = document.getElementById("attachment-preview");
 const attachmentName = document.getElementById("attachment-name");
 const removeAttachmentBtn = document.getElementById("remove-attachment");
+let voiceRecMode = "idle"; // idle | recording
 
 // Lightbox Elements
 const lightbox = document.getElementById("lightbox");
@@ -1171,13 +1173,47 @@ function showToast(message, duration = 2800) {
   }, duration);
 }
 
+function isUserMuted() {
+  return Boolean(window._mutedUntil && Date.now() < window._mutedUntil);
+}
+
+function resetSendButtonState() {
+  if (isUserMuted()) {
+    const remaining = Math.ceil((window._mutedUntil - Date.now()) / 1000);
+    shareButton.innerHTML = `<span style="font-size:11px;font-weight:700;letter-spacing:-0.5px;">${remaining}s</span>`;
+    shareButton.disabled = true;
+  } else {
+    shareButton.innerHTML = DEFAULT_SEND_ICON;
+    updateSendState();
+  }
+}
+
 function updateSendState() {
   // If user is currently muted, keep controls disabled
-  if (window._mutedUntil && Date.now() < window._mutedUntil) {
+  if (isUserMuted()) {
     shareButton.disabled = true;
     messageInput.disabled = true;
     return;
   }
+
+  // Restore default paper plane icon if mute has ended or residual text is stuck
+  if (!shareButton.querySelector("svg") && shareButton.innerHTML !== SPINNER_SVG) {
+    shareButton.innerHTML = DEFAULT_SEND_ICON;
+  }
+
+  // When recording voice note, the send button is active so the user can send it with 1 click!
+  if (voiceRecMode === "recording") {
+    shareButton.disabled = !isConnected;
+    messageInput.disabled = true;
+    return;
+  }
+
+  messageInput.disabled = false;
+  if (attachButton) attachButton.disabled = false;
+  if (attachPhotoBtn) attachPhotoBtn.disabled = false;
+  const voiceBtn = document.getElementById("voice-note-btn");
+  if (voiceBtn) voiceBtn.disabled = false;
+
   shareButton.disabled = !isConnected || (!messageInput.value.trim() && !currentAttachment);
 }
 
@@ -1191,31 +1227,42 @@ function handleMuted(payload) {
   shareButton.disabled = true;
   messageInput.disabled = true;
   if (attachButton) attachButton.disabled = true;
+  if (attachPhotoBtn) attachPhotoBtn.disabled = true;
+  const voiceBtn = document.getElementById("voice-note-btn");
+  if (voiceBtn) voiceBtn.disabled = true;
+
+  // Clear any pending attachment
+  if (currentAttachment) {
+    currentAttachment = null;
+    if (attachmentPreview) attachmentPreview.classList.add("hidden");
+  }
 
   // Show initial toast
   showToast(`⛔ ${payload.message || 'You have been muted for spamming.'}`);
 
   // Clear any previous countdown
-  if (_muteCountdownTimer) clearInterval(_muteCountdownTimer);
+  if (_muteCountdownTimer) {
+    clearInterval(_muteCountdownTimer);
+    _muteCountdownTimer = null;
+  }
 
-  // Start countdown timer on the send button
-  const originalBtnContent = shareButton.innerHTML;
-  _muteCountdownTimer = setInterval(() => {
+  const tick = () => {
     const remaining = Math.ceil((mutedUntil - Date.now()) / 1000);
     if (remaining <= 0) {
-      // Mute expired — re-enable everything
+      // Mute expired — re-enable everything cleanly
       clearInterval(_muteCountdownTimer);
       _muteCountdownTimer = null;
       window._mutedUntil = 0;
-      shareButton.innerHTML = originalBtnContent;
-      messageInput.disabled = false;
-      if (attachButton) attachButton.disabled = false;
-      updateSendState();
+      resetSendButtonState();
       showToast("✅ You can send messages again.");
     } else {
       shareButton.innerHTML = `<span style="font-size:11px;font-weight:700;letter-spacing:-0.5px;">${remaining}s</span>`;
+      shareButton.disabled = true;
     }
-  }, 1000);
+  };
+
+  tick();
+  _muteCountdownTimer = setInterval(tick, 1000);
 }
 
 // Anti-Spam: Show a system notice in the chat (visible to all users)
@@ -3185,6 +3232,12 @@ const uploadProgress = {
 
 // Attachment Logic
 async function processFile(file) {
+  if (isUserMuted()) {
+    const remaining = Math.ceil((window._mutedUntil - Date.now()) / 1000);
+    showToast(`⛔ You are muted. Please wait ${remaining}s.`);
+    return;
+  }
+  if (!file) return;
   if (file.size > 5 * 1024 * 1024) {
     showToast("File is too large! Maximum is 5MB.");
     return;
@@ -3216,6 +3269,12 @@ function clearAttachment() {
 }
 
 async function sendSingleFile(file, replyToId = null, progressOffset = 0, progressSpan = 100, labelPrefix = "") {
+  if (isUserMuted()) {
+    const remaining = Math.ceil((window._mutedUntil - Date.now()) / 1000);
+    showToast(`⛔ You are muted. Please wait ${remaining}s.`);
+    uploadProgress.hide();
+    return false;
+  }
   if (!file) return false;
   if (file.size > 5 * 1024 * 1024) {
     showToast(`"${file.name}" is too large (max 5MB), skipped.`);
@@ -3342,13 +3401,18 @@ async function sendSingleFile(file, replyToId = null, progressOffset = 0, progre
 }
 
 async function sendMultipleFiles(files) {
+  if (isUserMuted()) {
+    const remaining = Math.ceil((window._mutedUntil - Date.now()) / 1000);
+    showToast(`⛔ You are muted. Please wait ${remaining}s.`);
+    return;
+  }
   if (!files || !files.length) return;
 
-  const originalBtnContent = shareButton.innerHTML;
   shareButton.innerHTML = SPINNER_SVG;
   shareButton.disabled = true;
   messageInput.disabled = true;
   if (attachButton) attachButton.disabled = true;
+  if (attachPhotoBtn) attachPhotoBtn.disabled = true;
 
   try {
     let sentCount = 0;
@@ -3363,6 +3427,12 @@ async function sendMultipleFiles(files) {
     if (validFiles.length === 0) return;
 
     for (let i = 0; i < validFiles.length; i++) {
+      if (isUserMuted()) {
+        const remaining = Math.ceil((window._mutedUntil - Date.now()) / 1000);
+        showToast(`⛔ You are muted. Please wait ${remaining}s.`);
+        break;
+      }
+
       const file = validFiles[i];
       const progressOffset = (i / validFiles.length) * 100;
       const progressSpan = (1 / validFiles.length) * 100;
@@ -3370,8 +3440,10 @@ async function sendMultipleFiles(files) {
 
       let ok = await sendSingleFile(file, replyingToMessage ? replyingToMessage.id : null, progressOffset, progressSpan, labelPrefix);
       if (!ok) {
+        if (isUserMuted()) break;
         // Retry once after waiting 1s for connection recovery
         await new Promise(r => setTimeout(r, 1000));
+        if (isUserMuted()) break;
         ok = await sendSingleFile(file, replyingToMessage ? replyingToMessage.id : null, progressOffset, progressSpan, labelPrefix);
       }
 
@@ -3399,23 +3471,26 @@ async function sendMultipleFiles(files) {
     uploadProgress.hide();
     showToast("Error sending files. Please try again.");
   } finally {
-    shareButton.innerHTML = originalBtnContent;
-    shareButton.disabled = false;
-    messageInput.disabled = false;
-    if (attachButton) attachButton.disabled = false;
-    updateSendState();
+    resetSendButtonState();
   }
 }
 
 if (attachButton && fileInput) {
-  attachButton.addEventListener("click", () => fileInput.click());
+  attachButton.addEventListener("click", () => {
+    if (isUserMuted()) {
+      const remaining = Math.ceil((window._mutedUntil - Date.now()) / 1000);
+      showToast(`⛔ You are muted. Please wait ${remaining}s.`);
+      return;
+    }
+    fileInput.click();
+  });
 
   // Prevent Enter on the attach button from re-opening file picker
   // Instead, submit the form (send the message) if ready
   attachButton.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      if (!shareButton.disabled) {
+      if (!shareButton.disabled && !isUserMuted()) {
         messageForm.requestSubmit();
       }
     }
@@ -3425,6 +3500,12 @@ if (attachButton && fileInput) {
     const files = Array.from(e.target.files);
     fileInput.value = ""; // Reset immediately
     if (!files.length) return;
+
+    if (isUserMuted()) {
+      const remaining = Math.ceil((window._mutedUntil - Date.now()) / 1000);
+      showToast(`⛔ You are muted. Please wait ${remaining}s.`);
+      return;
+    }
 
     if (files.length === 1) {
       // Single file: attach normally, let user add text and press send
@@ -3439,11 +3520,24 @@ if (attachButton && fileInput) {
 }
 
 if (attachPhotoBtn && imageInput) {
-  attachPhotoBtn.addEventListener("click", () => imageInput.click());
+  attachPhotoBtn.addEventListener("click", () => {
+    if (isUserMuted()) {
+      const remaining = Math.ceil((window._mutedUntil - Date.now()) / 1000);
+      showToast(`⛔ You are muted. Please wait ${remaining}s.`);
+      return;
+    }
+    imageInput.click();
+  });
   imageInput.addEventListener("change", async (e) => {
     const files = Array.from(e.target.files);
     imageInput.value = "";
     if (!files.length) return;
+
+    if (isUserMuted()) {
+      const remaining = Math.ceil((window._mutedUntil - Date.now()) / 1000);
+      showToast(`⛔ You are muted. Please wait ${remaining}s.`);
+      return;
+    }
 
     if (files.length === 1) {
       await processFile(files[0]);
@@ -3467,6 +3561,11 @@ document.addEventListener("paste", async (e) => {
   for (let index in items) {
     const item = items[index];
     if (item.kind === 'file') {
+      if (isUserMuted()) {
+        const remaining = Math.ceil((window._mutedUntil - Date.now()) / 1000);
+        showToast(`⛔ You are muted. Please wait ${remaining}s.`);
+        return;
+      }
       const blob = item.getAsFile();
       await processFile(blob);
       return;
@@ -3479,6 +3578,7 @@ const dragOverlay = document.getElementById("drag-overlay");
 document.addEventListener("dragenter", (e) => {
   e.preventDefault();
   e.stopPropagation();
+  if (isUserMuted()) return;
   if (e.dataTransfer.types && e.dataTransfer.types.includes("Files")) {
     if (dragOverlay) dragOverlay.classList.remove("hidden");
   }
@@ -3487,6 +3587,7 @@ document.addEventListener("dragenter", (e) => {
 document.addEventListener("dragover", (e) => {
   e.preventDefault();
   e.stopPropagation();
+  if (isUserMuted()) return;
   if (e.dataTransfer.types && e.dataTransfer.types.includes("Files")) {
     e.dataTransfer.dropEffect = 'copy';
   }
@@ -3505,6 +3606,11 @@ document.addEventListener("drop", async (e) => {
   e.stopPropagation();
   if (dragOverlay) dragOverlay.classList.add("hidden");
   if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+    if (isUserMuted()) {
+      const remaining = Math.ceil((window._mutedUntil - Date.now()) / 1000);
+      showToast(`⛔ You are muted. Please wait ${remaining}s.`);
+      return;
+    }
     const files = Array.from(e.dataTransfer.files);
     if (files.length === 1) {
       await processFile(files[0]);
@@ -3710,20 +3816,21 @@ if (mdToolbar) {
     const action = btn.dataset.mdAction;
 
     if (action === 'image') {
-      const imgInput = document.getElementById('image-input') || fileInput;
+      if (isUserMuted()) {
+        const remaining = Math.ceil((window._mutedUntil - Date.now()) / 1000);
+        showToast(`⛔ You are muted. Please wait ${remaining}s.`);
+        return;
+      }
+      const imgInput = imageInput || document.getElementById('image-input') || fileInput;
       if (imgInput) imgInput.click();
       return;
     }
     if (action === 'file') {
-      if (fileInput) fileInput.click();
-      return;
-    }
-
-    if (action === 'image') {
-      if (imageInput) imageInput.click();
-      return;
-    }
-    if (action === 'file') {
+      if (isUserMuted()) {
+        const remaining = Math.ceil((window._mutedUntil - Date.now()) / 1000);
+        showToast(`⛔ You are muted. Please wait ${remaining}s.`);
+        return;
+      }
       if (fileInput) fileInput.click();
       return;
     }
@@ -4186,10 +4293,20 @@ window.addEventListener("beforeunload", saveDraft);
 messageForm.addEventListener("submit", async (event) => {
   event.preventDefault();
 
+  if (isUserMuted()) {
+    const remaining = Math.ceil((window._mutedUntil - Date.now()) / 1000);
+    showToast(`⛔ You are muted. Please wait ${remaining}s.`);
+    return;
+  }
+
+  // If voice recording is in progress, tapping Send immediately stops and sends the voice note!
+  if (voiceRecMode === "recording") {
+    stopVoiceRecording();
+    return;
+  }
+
   const text = messageInput.value.trim();
   if (!text && !currentAttachment) return;
-
-  const originalBtnContent = shareButton.innerHTML;
 
   let payloadData = text;
   const snapshotAttachment = currentAttachment; // snapshot before clearing
@@ -4235,9 +4352,7 @@ messageForm.addEventListener("submit", async (event) => {
   if (!connected || !send(payload)) {
     if (snapshotAttachment) uploadProgress.hide();
     showToast("⚠️ Waiting for the live connection before sharing.");
-    shareButton.innerHTML = originalBtnContent;
-    shareButton.disabled = false;
-    messageInput.disabled = false;
+    resetSendButtonState();
     return;
   }
 
@@ -4305,10 +4420,10 @@ messageForm.addEventListener("submit", async (event) => {
   updateSendState();
   send({ type: "typing", text: "" });
 
-  shareButton.innerHTML = originalBtnContent;
-  shareButton.disabled = false;
-  messageInput.disabled = false;
-  messageInput.focus();
+  resetSendButtonState();
+  if (!isUserMuted()) {
+    messageInput.focus();
+  }
   setTimeout(scrollToBottom, 50);
 });
 
@@ -4337,13 +4452,13 @@ const voiceNoteBtn = document.getElementById("voice-note-btn");
 const voiceRecBanner = document.getElementById("voice-recording-banner");
 const voiceRecTimer = document.getElementById("voice-rec-timer");
 const voiceRecCancel = document.getElementById("voice-rec-cancel");
+const voiceRecSend = document.getElementById("voice-rec-send");
 
 let voiceRecorder = null;
 let voiceRecChunks = [];
 let voiceRecStream = null;
 let voiceRecStartTime = 0;
 let voiceRecTimerInterval = null;
-let voiceRecMode = "idle"; // idle | recording
 let voiceRecCancelled = false;
 
 function formatRecTime(ms) {
@@ -4360,6 +4475,11 @@ function updateRecTimer() {
 }
 
 async function startVoiceRecording() {
+  if (isUserMuted()) {
+    const remaining = Math.ceil((window._mutedUntil - Date.now()) / 1000);
+    showToast(`⛔ You are muted. Please wait ${remaining}s.`);
+    return;
+  }
   if (voiceRecMode === "recording") return;
 
   try {
@@ -4393,19 +4513,30 @@ async function startVoiceRecording() {
     clearInterval(voiceRecTimerInterval);
     voiceRecTimerInterval = null;
 
-    // Hide banner
+    // Hide banner & restore composer state
     voiceRecBanner.classList.add("hidden");
     voiceNoteBtn.classList.remove("is-recording");
+    voiceNoteBtn.title = "Tap to record voice note";
     voiceRecMode = "idle";
+    messageInput.disabled = false;
+    messageInput.placeholder = "Type a message...";
 
     // If cancelled, discard everything
     if (voiceRecCancelled) {
       voiceRecChunks = [];
       voiceRecCancelled = false;
+      resetSendButtonState();
       return;
     }
 
     if (voiceRecChunks.length === 0) return;
+
+    if (isUserMuted()) {
+      const remaining = Math.ceil((window._mutedUntil - Date.now()) / 1000);
+      showToast(`⛔ You are muted. Please wait ${remaining}s.`);
+      voiceRecChunks = [];
+      return;
+    }
 
     const blob = new Blob(voiceRecChunks, { type: voiceRecorder.mimeType });
     voiceRecChunks = [];
@@ -4447,7 +4578,6 @@ async function startVoiceRecording() {
     });
 
     // Show sending state
-    const originalBtnContent = shareButton.innerHTML;
     shareButton.innerHTML = SPINNER_SVG;
     shareButton.disabled = true;
     await new Promise(r => setTimeout(r, 15));
@@ -4464,8 +4594,7 @@ async function startVoiceRecording() {
     const connected = await waitForConnection(6000);
     if (!connected || !send(payload)) {
       showToast("⚠️ Waiting for connection before sending voice note.");
-      shareButton.innerHTML = originalBtnContent;
-      shareButton.disabled = false;
+      resetSendButtonState();
       return;
     }
 
@@ -4498,9 +4627,7 @@ async function startVoiceRecording() {
       }
     }, 25000);
 
-    shareButton.innerHTML = originalBtnContent;
-    shareButton.disabled = false;
-    updateSendState();
+    resetSendButtonState();
     showToast("🎙️ Voice note sent!");
     setTimeout(scrollToBottom, 50);
   });
@@ -4512,9 +4639,15 @@ async function startVoiceRecording() {
 
   // Show UI
   voiceNoteBtn.classList.add("is-recording");
+  voiceNoteBtn.title = "Finish & send voice note";
   voiceRecBanner.classList.remove("hidden");
   voiceRecTimer.textContent = "0:00";
   voiceRecTimerInterval = setInterval(updateRecTimer, 200);
+
+  // Activate Send Button & provide composer prompt
+  messageInput.disabled = true;
+  messageInput.placeholder = "🎙️ Recording audio... Tap Send to share";
+  updateSendState();
 }
 
 function stopVoiceRecording() {
@@ -4537,7 +4670,11 @@ function cancelVoiceRecording() {
   voiceRecTimerInterval = null;
   voiceRecBanner.classList.add("hidden");
   voiceNoteBtn.classList.remove("is-recording");
+  voiceNoteBtn.title = "Tap to record voice note";
   voiceRecMode = "idle";
+  messageInput.disabled = false;
+  messageInput.placeholder = "Type a message...";
+  resetSendButtonState();
   showToast("Recording cancelled.");
 }
 
@@ -4557,6 +4694,15 @@ if (voiceRecCancel) {
   voiceRecCancel.addEventListener("click", (e) => {
     e.preventDefault();
     cancelVoiceRecording();
+  });
+}
+
+if (voiceRecSend) {
+  voiceRecSend.addEventListener("click", (e) => {
+    e.preventDefault();
+    if (voiceRecMode === "recording") {
+      stopVoiceRecording();
+    }
   });
 }
 

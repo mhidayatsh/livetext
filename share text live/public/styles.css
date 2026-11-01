@@ -2546,10 +2546,17 @@ textarea {
   color: var(--muted);
 }
 
+.voice-rec-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .voice-rec-cancel {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   padding: 6px 12px;
   border-radius: 8px;
   border: 1px solid rgba(239, 68, 68, 0.3);
@@ -2558,10 +2565,34 @@ textarea {
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.2s;
 }
 .voice-rec-cancel:hover {
   background: rgba(239, 68, 68, 0.2);
+}
+
+.voice-rec-send {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.35);
+}
+.voice-rec-send:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(99, 102, 241, 0.45);
+}
+.voice-rec-send:active {
+  transform: translateY(0);
 }
 
 /* Inline Audio Player (in message bubbles) */
