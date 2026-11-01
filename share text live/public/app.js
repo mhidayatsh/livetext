@@ -43,6 +43,7 @@ const showQrBtn = document.querySelector("#show-qr-btn");
 const qrModal = document.querySelector("#qr-modal");
 const closeQrModal = document.querySelector("#close-qr-modal");
 const qrcodeContainer = document.querySelector("#qrcode-container");
+const SPINNER_SVG = `<svg class="btn-spinner" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>`;
 
 // Theme & Notification Elements
 const notifToggle = document.getElementById("notif-toggle");
@@ -963,6 +964,15 @@ async function connect(options = {}) {
         showBroadcastAnnouncement(payload.message.replace(/^📢 \[Admin Announcement\]:\s*/, ""));
       } else {
         showToast(payload.message || "Something went wrong.");
+        if (pendingMessages.size > 0) {
+          const latestPending = Array.from(pendingMessages.values()).pop();
+          if (latestPending) {
+            latestPending.isFailed = true;
+            latestPending.isPending = false;
+            pendingMessages.delete(latestPending.id);
+            renderMessages();
+          }
+        }
       }
     }
 
@@ -999,9 +1009,10 @@ function startHeartbeat() {
       return;
     }
 
-    // If no pong or server message received for > 28s, connection is a zombie
+    // If no pong or server message received for > 75s, connection is a zombie
+    // (75s threshold prevents false disconnects during large 5MB file downloads on 2G/3G mobile networks)
     const timeSincePong = Date.now() - lastPongTime;
-    if (timeSincePong > 28000) {
+    if (timeSincePong > 75000) {
       console.warn("[Shareli] Heartbeat timeout: no response in", Math.round(timeSincePong / 1000), "s. Forcing reconnect.");
       stopHeartbeat();
       forceReconnect("heartbeat_timeout");
@@ -1202,7 +1213,7 @@ function handleMuted(payload) {
       updateSendState();
       showToast("✅ You can send messages again.");
     } else {
-      shareButton.innerHTML = `⛔ ${remaining}s`;
+      shareButton.innerHTML = `<span style="font-size:11px;font-weight:700;letter-spacing:-0.5px;">${remaining}s</span>`;
     }
   }, 1000);
 }
@@ -1632,18 +1643,35 @@ async function copyImageToClipboard(dataUrl, button = null) {
 
 async function triggerAttachmentDownload(attachmentData) {
   if (!attachmentData || !attachmentData.data) return;
+  const fileName = attachmentData.name || (attachmentData.type && attachmentData.type.startsWith("image/") ? "image.png" : "download");
+  const approxBytes = attachmentData.size || Math.round((attachmentData.data.length || 0) * 0.75);
+
+  uploadProgress.show(fileName, approxBytes, "Preparing download...", "⬇️");
+  uploadProgress.update(30, "Processing file...");
+
   try {
-    const res = await fetch(attachmentData.data);
-    const blob = await res.blob();
+    let blob = null;
+    if (attachmentData.data.startsWith("data:")) {
+      blob = dataURItoBlob(attachmentData.data);
+    }
+    if (!blob) {
+      const res = await fetch(attachmentData.data);
+      blob = await res.blob();
+    }
+    uploadProgress.update(75, "Saving to your device...");
+
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = attachmentData.name || (attachmentData.type && attachmentData.type.startsWith("image/") ? "image.png" : "download");
+    a.download = fileName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    uploadProgress.complete("Downloaded!");
+    showToast(`✅ "${fileName}" downloaded!`);
   } catch (e) {
+    uploadProgress.hide();
     console.error("Download failed", e);
     showToast("Download failed");
   }
@@ -2540,6 +2568,7 @@ function renderMessages() {
         img.alt = attachmentData.name;
         img.className = "message-image-preview";
         img.style.cursor = "pointer";
+        img.decoding = "async";
         
         // Modal for full image
         img.onclick = () => {
@@ -3108,6 +3137,52 @@ if (cancelReplyBtn) {
   cancelReplyBtn.addEventListener('click', () => setReplyingTo(null));
 }
 
+// Utility: Format bytes into human-readable string
+function formatFileSize(bytes) {
+  if (!bytes || bytes <= 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// Real-Time Upload Progress Controller
+const uploadProgress = {
+  get container() { return document.getElementById("file-progress-container"); },
+  get nameEl() { return document.getElementById("file-progress-filename"); },
+  get percentEl() { return document.getElementById("file-progress-percent"); },
+  get barEl() { return document.getElementById("file-progress-bar"); },
+  get statusEl() { return document.getElementById("file-progress-status"); },
+  get sizeEl() { return document.getElementById("file-progress-size"); },
+
+  show(filename, sizeBytes, initialStatus = "Encrypting & preparing...", icon = "📎") {
+    if (this.container) {
+      this.container.classList.remove("hidden");
+      const iconEl = this.container.querySelector(".file-progress-icon");
+      if (iconEl) iconEl.textContent = icon;
+    }
+    if (this.nameEl) this.nameEl.textContent = filename || "File";
+    if (this.sizeEl) this.sizeEl.textContent = sizeBytes ? formatFileSize(sizeBytes) : "";
+    this.update(0, initialStatus);
+  },
+
+  update(percent, statusText) {
+    const p = Math.min(100, Math.max(0, Math.round(percent)));
+    if (this.barEl) this.barEl.style.width = `${p}%`;
+    if (this.percentEl) this.percentEl.textContent = `${p}%`;
+    if (statusText && this.statusEl) this.statusEl.textContent = statusText;
+  },
+
+  complete(statusText = "Upload complete!") {
+    this.update(100, statusText);
+    setTimeout(() => this.hide(), 1200);
+  },
+
+  hide() {
+    if (this.container) this.container.classList.add("hidden");
+    this.update(0, "");
+  }
+};
+
 // Attachment Logic
 async function processFile(file) {
   if (file.size > 5 * 1024 * 1024) {
@@ -3121,10 +3196,11 @@ async function processFile(file) {
       currentAttachment = {
         name: file.name || "Pasted Image",
         type: file.type || "application/octet-stream",
+        size: file.size,
         data: e.target.result // base64 data url
       };
       if (attachmentPreview) attachmentPreview.classList.remove("hidden");
-      if (attachmentName) attachmentName.textContent = currentAttachment.name;
+      if (attachmentName) attachmentName.textContent = `${currentAttachment.name} (${formatFileSize(file.size)})`;
       updateSendState();
       resolve();
     };
@@ -3139,23 +3215,33 @@ function clearAttachment() {
   updateSendState();
 }
 
-async function sendSingleFile(file, replyToId = null) {
+async function sendSingleFile(file, replyToId = null, progressOffset = 0, progressSpan = 100, labelPrefix = "") {
   if (!file) return false;
   if (file.size > 5 * 1024 * 1024) {
     showToast(`"${file.name}" is too large (max 5MB), skipped.`);
     return false;
   }
 
+  const prefix = labelPrefix ? `${labelPrefix} ` : "";
+  uploadProgress.show(file.name, file.size, `${prefix}Reading file...`);
+
   // 1. Wait for connection (handles mobile sleep/resume during file picker)
   const connected = await waitForConnection(10000);
   if (!connected) {
+    uploadProgress.hide();
     showToast("⚠️ Network problem. Waiting for connection...");
     return false;
   }
 
-  // 2. Read file to Base64 Data URL
+  // 2. Read file to Base64 Data URL with progress tracking
   const attachment = await new Promise((resolve) => {
     const reader = new FileReader();
+    reader.onprogress = (e) => {
+      if (e.lengthComputable && e.total > 0) {
+        const readP = progressOffset + (e.loaded / e.total) * (progressSpan * 0.25);
+        uploadProgress.update(readP, `${prefix}Reading file (${Math.round((e.loaded / e.total) * 100)}%)...`);
+      }
+    };
     reader.onload = (e) => resolve({
       name: file.name || "File",
       type: file.type || "application/octet-stream",
@@ -3166,30 +3252,61 @@ async function sendSingleFile(file, replyToId = null) {
   });
 
   if (!attachment || !attachment.data) {
+    uploadProgress.hide();
     showToast(`Could not read "${file.name}"`);
     return false;
   }
 
+  // 3. Encrypt payload
+  const encryptStartP = progressOffset + progressSpan * 0.25;
+  uploadProgress.update(encryptStartP, `${prefix}Encrypting with AES-GCM (Zero-Knowledge)...`);
+  await new Promise(r => setTimeout(r, 15)); // Yield to paint
   const payloadData = JSON.stringify({
     __v: 1,
     text: "",
     file: attachment
   });
-
-  // 3. Encrypt payload
   const encryptedText = await encryptText(payloadData);
+  
+  const uploadStartP = progressOffset + progressSpan * 0.45;
+  uploadProgress.update(uploadStartP, `${prefix}Sending over secure connection...`);
+
   const payload = {
     type: "create",
     text: encryptedText,
+    isFile: true,
     expiresInMs: Number(expirySelect.value)
   };
   if (replyToId) {
     payload.replyTo = replyToId;
   }
 
-  // 4. Send via WebSocket
+  // 4. Send via WebSocket & monitor network buffer drainage
   if (!send(payload)) {
+    uploadProgress.hide();
     return false;
+  }
+
+  // Monitor WebSocket network buffer
+  if (socket && typeof socket.bufferedAmount === "number" && socket.bufferedAmount > 0) {
+    const startBuffered = socket.bufferedAmount;
+    const maxBufferWait = Date.now() + 90000;
+    await new Promise((resolve) => {
+      const checkInterval = setInterval(() => {
+        const currentBuffered = socket ? socket.bufferedAmount : 0;
+        const sent = startBuffered - currentBuffered;
+        const networkP = uploadStartP + (sent / startBuffered) * (progressSpan * 0.50);
+        uploadProgress.update(networkP, `${prefix}Uploading: ${Math.round(networkP)}%`);
+        if (currentBuffered <= 0 || !socket || socket.readyState !== WebSocket.OPEN || Date.now() > maxBufferWait) {
+          clearInterval(checkInterval);
+          resolve();
+        }
+      }, 50);
+    });
+  }
+
+  if (progressSpan === 100) {
+    uploadProgress.complete("Sent!");
   }
 
   // 5. Add optimistic pending message
@@ -3228,6 +3345,7 @@ async function sendMultipleFiles(files) {
   if (!files || !files.length) return;
 
   const originalBtnContent = shareButton.innerHTML;
+  shareButton.innerHTML = SPINNER_SVG;
   shareButton.disabled = true;
   messageInput.disabled = true;
   if (attachButton) attachButton.disabled = true;
@@ -3246,25 +3364,28 @@ async function sendMultipleFiles(files) {
 
     for (let i = 0; i < validFiles.length; i++) {
       const file = validFiles[i];
-      shareButton.innerHTML = `Sending (${i + 1}/${validFiles.length})...`;
+      const progressOffset = (i / validFiles.length) * 100;
+      const progressSpan = (1 / validFiles.length) * 100;
+      const labelPrefix = `(${i + 1}/${validFiles.length})`;
 
-      let ok = await sendSingleFile(file, replyingToMessage ? replyingToMessage.id : null);
+      let ok = await sendSingleFile(file, replyingToMessage ? replyingToMessage.id : null, progressOffset, progressSpan, labelPrefix);
       if (!ok) {
         // Retry once after waiting 1s for connection recovery
         await new Promise(r => setTimeout(r, 1000));
-        ok = await sendSingleFile(file, replyingToMessage ? replyingToMessage.id : null);
+        ok = await sendSingleFile(file, replyingToMessage ? replyingToMessage.id : null, progressOffset, progressSpan, labelPrefix);
       }
 
       if (ok) {
         sentCount++;
         // Small delay between uploads to allow WebSocket buffer to flush smoothly on mobile
-        await new Promise(r => setTimeout(r, 350));
+        await new Promise(r => setTimeout(r, 200));
       } else {
         showToast(`Failed to send "${file.name}". Network error.`);
       }
     }
 
     if (sentCount > 0) {
+      uploadProgress.complete(sentCount === 1 ? "File sent!" : `All ${sentCount} files sent!`);
       setReplyingTo(null);
       if (sentCount === validFiles.length) {
         showToast(sentCount === 1 ? "File sent!" : `All ${sentCount} files sent!`);
@@ -3275,6 +3396,7 @@ async function sendMultipleFiles(files) {
     }
   } catch (err) {
     console.error("Error sending multiple files:", err);
+    uploadProgress.hide();
     showToast("Error sending files. Please try again.");
   } finally {
     shareButton.innerHTML = originalBtnContent;
@@ -4080,19 +4202,30 @@ messageForm.addEventListener("submit", async (event) => {
     });
   }
 
-  // Show "Sending..." state on button for large attachments
-  if (snapshotAttachment && snapshotAttachment.data.length > 100000) {
-    shareButton.innerHTML = "Sending...";
+  // Show upload progress for file attachments
+  if (snapshotAttachment) {
+    const approxBytes = snapshotAttachment.size || Math.round(snapshotAttachment.data.length * 0.75);
+    uploadProgress.show(snapshotAttachment.name, approxBytes, "Encrypting with AES-GCM (Zero-Knowledge)...");
+    shareButton.innerHTML = SPINNER_SVG;
     shareButton.disabled = true;
     messageInput.disabled = true;
     
-    // Yield to browser to paint the button state before heavy crypto processing
+    // Yield to browser to paint before heavy crypto processing
     await new Promise(r => setTimeout(r, 15));
   }
 
   // Encrypt and send
   const encryptedText = await encryptText(payloadData);
-  const payload = { type: "create", text: encryptedText, expiresInMs: Number(expirySelect.value) };
+  if (snapshotAttachment) {
+    uploadProgress.update(45, "Sending over secure connection...");
+  }
+
+  const payload = {
+    type: "create",
+    text: encryptedText,
+    isFile: Boolean(snapshotAttachment),
+    expiresInMs: Number(expirySelect.value)
+  };
   if (replyingToMessage) {
     payload.replyTo = replyingToMessage.id;
   }
@@ -4100,11 +4233,33 @@ messageForm.addEventListener("submit", async (event) => {
   // Wait for connection if recovering from sleep/background
   const connected = await waitForConnection(6000);
   if (!connected || !send(payload)) {
+    if (snapshotAttachment) uploadProgress.hide();
     showToast("⚠️ Waiting for the live connection before sharing.");
     shareButton.innerHTML = originalBtnContent;
     shareButton.disabled = false;
     messageInput.disabled = false;
     return;
+  }
+
+  // Track network upload progress for attachments
+  if (snapshotAttachment) {
+    if (socket && typeof socket.bufferedAmount === "number" && socket.bufferedAmount > 0) {
+      const startBuffered = socket.bufferedAmount;
+      const maxWait = Date.now() + 90000;
+      await new Promise((resolve) => {
+        const checkInterval = setInterval(() => {
+          const currentBuffered = socket ? socket.bufferedAmount : 0;
+          const sent = startBuffered - currentBuffered;
+          const networkP = 45 + (sent / startBuffered) * 50;
+          uploadProgress.update(networkP, `Uploading: ${Math.round(networkP)}%`);
+          if (currentBuffered <= 0 || !socket || socket.readyState !== WebSocket.OPEN || Date.now() > maxWait) {
+            clearInterval(checkInterval);
+            resolve();
+          }
+        }, 50);
+      });
+    }
+    uploadProgress.complete("Sent!");
   }
 
   // ✅ Send succeeded — show optimistic (pending) message immediately
@@ -4293,7 +4448,7 @@ async function startVoiceRecording() {
 
     // Show sending state
     const originalBtnContent = shareButton.innerHTML;
-    shareButton.innerHTML = "Sending...";
+    shareButton.innerHTML = SPINNER_SVG;
     shareButton.disabled = true;
     await new Promise(r => setTimeout(r, 15));
 
@@ -4302,6 +4457,7 @@ async function startVoiceRecording() {
     const payload = {
       type: "create",
       text: encryptedText,
+      isFile: true,
       expiresInMs: Number(expirySelect.value)
     };
 

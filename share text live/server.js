@@ -31,6 +31,13 @@ const MAX_CONNECTIONS_PER_IP = 200; // High limit to allow college/office NAT ne
 const MAX_TOTAL_CONNECTIONS = 2000;
 const PRIVATE_ROOM_GRACE_MS = 10 * 60 * 1000; // 10 min grace period before deleting empty private rooms
 
+// Memory Safety & Dual-Pool Retention Architecture
+const MAX_ROOM_MEMORY_BYTES = 50 * 1024 * 1024;  // 50MB absolute ceiling per room
+const MAX_MEDIA_POOL_BYTES  = 45 * 1024 * 1024;  // 45MB dedicated file/media pool
+const MAX_TEXT_POOL_BYTES   = 5 * 1024 * 1024;   // 5MB dedicated chat/text reserve pool
+const MAX_ROOM_MESSAGES     = 200;               // Max 200 active text messages per room (rolling chat)
+const SERVER_CRITICAL_HEAP_BYTES = 450 * 1024 * 1024; // 450MB emergency circuit breaker
+
 // Helper to get real client IP, respecting Cloudflare & reverse proxies (Render, NGINX)
 function getRequestIp(req) {
   if (req && req.headers) {
@@ -267,6 +274,7 @@ function formatMessageForClient(message) {
   return {
     id: message.id,
     text: message.text,
+    isFile: Boolean(message.isFile || (message.text && message.text.length > 40000)),
     authorId: message.authorId,
     authorName: message.authorName,
     authorColor: message.authorColor,
@@ -445,6 +453,110 @@ function removeExpiredMessages(room) {
   return removed;
 }
 
+// Helper to determine if a message is a file/media attachment
+function isMediaMessage(msg) {
+  if (!msg) return false;
+  if (typeof msg.isFile === 'boolean') return msg.isFile;
+  // Fallback for legacy payloads: Encrypted file payloads are > 40KB (standard chat texts are typically < 5KB)
+  const textLen = (msg.text && typeof msg.text === 'string') ? msg.text.length : 0;
+  return textLen > 40000;
+}
+
+// Helper to determine if a message is pinned in the room (pinned messages have immunity)
+function isMessagePinned(room, messageId) {
+  if (!room || !messageId) return false;
+  if (Array.isArray(room.pinnedMessageIds) && room.pinnedMessageIds.includes(messageId)) return true;
+  return room.pinnedMessageId === messageId;
+}
+
+// Memory Safety Helpers: Calculate accurate RAM footprint of message payload
+function calculateMessageBytes(msg) {
+  if (!msg) return 0;
+  const textBytes = msg.text ? Buffer.byteLength(String(msg.text), 'utf8') : 0;
+  // Account for metadata overhead (UUID, author details, timestamps, seenBy Set)
+  return textBytes + 400;
+}
+
+// Calculate total active memory consumed by a room's messages
+function getRoomTotalBytes(room) {
+  if (!room || !Array.isArray(room.messages)) return 0;
+  return room.messages.reduce((total, msg) => total + calculateMessageBytes(msg), 0);
+}
+
+// Calculate memory consumed specifically by media files or text messages
+function getRoomPoolBytes(room, isMedia) {
+  if (!room || !Array.isArray(room.messages)) return 0;
+  return room.messages.reduce((total, msg) => {
+    if (isMediaMessage(msg) === isMedia) {
+      return total + calculateMessageBytes(msg);
+    }
+    return total;
+  }, 0);
+}
+
+// Dual-Pool Eviction Engine: Independent quotas for Media vs Text + Pinned Protection
+function evictRoomMemoryIfNeeded(room, incomingBytes = 0, isIncomingMedia = false) {
+  if (!room || !Array.isArray(room.messages)) return true;
+  removeExpiredMessages(room);
+
+  if (isIncomingMedia) {
+    // -------------------------------------------------------------
+    // MEDIA POOL EVICTION: Files ONLY evict other unpinned files!
+    // Text messages are NEVER touched to make room for files.
+    // -------------------------------------------------------------
+    let currentMediaBytes = getRoomPoolBytes(room, true);
+    
+    while (
+      (currentMediaBytes + incomingBytes > MAX_MEDIA_POOL_BYTES) ||
+      (getRoomTotalBytes(room) + incomingBytes > MAX_ROOM_MEMORY_BYTES)
+    ) {
+      // Find oldest UNPINNED media message
+      const oldestMediaIndex = room.messages.findIndex(m => isMediaMessage(m) && !isMessagePinned(room, m.id));
+      if (oldestMediaIndex !== -1) {
+        const evicted = room.messages.splice(oldestMediaIndex, 1)[0];
+        if (evicted) {
+          currentMediaBytes -= calculateMessageBytes(evicted);
+          broadcastDeleteMessage(room, evicted.id);
+        }
+      } else {
+        // All active media files in this room are PINNED!
+        // We refuse to silently destroy pinned files. Reject incoming file gracefully.
+        return false;
+      }
+    }
+    return true;
+  } else {
+    // -------------------------------------------------------------
+    // TEXT POOL EVICTION: Text chat rolls off oldest unpinned text.
+    // Media files are NEVER evicted by text chatting!
+    // -------------------------------------------------------------
+    const textMessages = room.messages.filter(m => !isMediaMessage(m));
+    let textCount = textMessages.length;
+    let currentTextBytes = getRoomPoolBytes(room, false);
+
+    while (
+      textCount >= MAX_ROOM_MESSAGES ||
+      (currentTextBytes + incomingBytes > MAX_TEXT_POOL_BYTES) ||
+      (getRoomTotalBytes(room) + incomingBytes > MAX_ROOM_MEMORY_BYTES)
+    ) {
+      // Find oldest UNPINNED text message
+      const oldestTextIndex = room.messages.findIndex(m => !isMediaMessage(m) && !isMessagePinned(room, m.id));
+      if (oldestTextIndex !== -1) {
+        const evicted = room.messages.splice(oldestTextIndex, 1)[0];
+        if (evicted) {
+          textCount--;
+          currentTextBytes -= calculateMessageBytes(evicted);
+          broadcastDeleteMessage(room, evicted.id);
+        }
+      } else {
+        // If all text messages are pinned, they have immunity. We never evict media for text chat!
+        break;
+      }
+    }
+    return true;
+  }
+}
+
 function handleClientAction(client, action) {
   if (!action || typeof action !== "object") return;
   
@@ -560,6 +672,20 @@ function handleClientAction(client, action) {
   }
 
   if (action.type === "create") {
+    // Anti-OOM Global Circuit Breaker: Safeguard process against heap exhaustion
+    if (process.memoryUsage().heapUsed > SERVER_CRITICAL_HEAP_BYTES) {
+      for (const r of rooms.values()) {
+        removeExpiredMessages(r);
+      }
+      if (process.memoryUsage().heapUsed > SERVER_CRITICAL_HEAP_BYTES) {
+        sendJson(client.socket, {
+          type: 'error',
+          message: '⚠️ Server memory is temporarily at capacity. Please wait a moment.'
+        });
+        return;
+      }
+    }
+
     const safeText = String(action.text || "");
     if (safeText.length > MAX_TEXT_LENGTH) {
       sendJson(client.socket, { type: 'error', message: 'Message too large. Maximum file size is 5MB.' });
@@ -570,9 +696,11 @@ function handleClientAction(client, action) {
 
     const expiresInMs = parseExpiresInMs(action.expiresInMs);
     const createdAt = Date.now();
+    const isFile = typeof action.isFile === 'boolean' ? action.isFile : safeText.length > 40000;
     const message = {
       id: crypto.randomUUID(),
       text,
+      isFile,
       authorId: client.id,
       authorName: client.name,
       authorColor: client.color,
@@ -584,12 +712,19 @@ function handleClientAction(client, action) {
       seenBy: new Set([client.id])
     };
 
+    // Calculate memory footprint and enforce room ceiling using Dual-Pool reservation
+    const incomingBytes = calculateMessageBytes(message);
+    const hasSpace = evictRoomMemoryIfNeeded(room, incomingBytes, isFile);
+    if (!hasSpace) {
+      sendJson(client.socket, {
+        type: 'error',
+        message: '⚠️ Room file storage is full (50MB). Please unpin or remove older files before uploading.'
+      });
+      return;
+    }
+
     room.messages.push(message);
     room.lastActiveAt = Date.now();
-    const MAX_MESSAGES_PER_ROOM = 200;
-    while (room.messages.length > MAX_MESSAGES_PER_ROOM) {
-      room.messages.shift();
-    }
     room.typingDrafts.delete(client.id);
     broadcastNewMessage(room, message);
     broadcastTyping(room);
@@ -610,6 +745,22 @@ function handleClientAction(client, action) {
     
     const EDIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
     if (Date.now() - message.createdAt > EDIT_WINDOW_MS) return; // Edit window expired
+
+    const isFile = isMediaMessage(message);
+    const oldBytes = calculateMessageBytes(message);
+    const newBytes = calculateMessageBytes({ text });
+    const deltaBytes = newBytes - oldBytes;
+
+    if (deltaBytes > 0) {
+      const hasSpace = evictRoomMemoryIfNeeded(room, deltaBytes, isFile);
+      if (!hasSpace) {
+        sendJson(client.socket, {
+          type: 'error',
+          message: '⚠️ Room storage is full. Cannot expand message size.'
+        });
+        return;
+      }
+    }
 
     message.text = text;
     message.updatedAt = Date.now();

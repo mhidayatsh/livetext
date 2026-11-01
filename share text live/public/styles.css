@@ -1167,6 +1167,17 @@ textarea {
   padding: 0;
 }
 
+.btn-spinner {
+  animation: btn-spin 0.75s linear infinite;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+@keyframes btn-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* Toast */
 .toast {
   position: fixed;
@@ -1995,6 +2006,99 @@ textarea {
   text-overflow: ellipsis;
 }
 
+/* Real-Time Upload Progress Card */
+.file-progress-card {
+  max-width: 860px;
+  margin: 0 auto 10px auto;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  padding: 10px 14px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  animation: slideProgressIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideProgressIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.file-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.file-progress-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.file-progress-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulseDot 1.2s infinite ease-in-out;
+  flex-shrink: 0;
+}
+
+@keyframes pulseDot {
+  0%, 100% { transform: scale(0.85); opacity: 0.6; }
+  50% { transform: scale(1.2); opacity: 1; }
+}
+
+.file-progress-icon {
+  font-size: 1rem;
+}
+
+.file-progress-name {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-progress-percent {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--accent-strong);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.file-progress-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.file-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6366f1 0%, #a855f7 50%, #38bdf8 100%);
+  border-radius: 3px;
+  transition: width 0.12s ease-out;
+}
+
+.file-progress-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
 .message-attachment-container {
   margin-bottom: 12px;
 }
@@ -2814,6 +2918,15 @@ textarea {
 
 [data-theme="light"] .attachment-preview {
   background: #f3f4f6;
+}
+
+[data-theme="light"] .file-progress-card {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .file-progress-track {
+  background: #e2e8f0;
 }
 
 [data-theme="light"] .voice-note-player {
