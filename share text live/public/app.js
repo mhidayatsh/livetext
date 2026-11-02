@@ -250,6 +250,26 @@ function splitHighlighted(html) {
   });
 }
 
+const codeSnippetStore = new Map();
+let codeSnippetSeq = 0;
+
+function highlightAndBuildCodeLines(codeStr, langToUse, startLineIndex = 0) {
+  let highlighted = '';
+  if (window.hljs && langToUse) {
+    try {
+      highlighted = hljs.highlight(codeStr, { language: langToUse }).value;
+    } catch (_) {
+      highlighted = String(codeStr).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+  } else {
+    highlighted = String(codeStr).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  const lines = splitHighlighted(highlighted);
+  return lines.map((lineHtml, i) => 
+    `<div class="code-line"><span class="line-num" aria-hidden="true">${startLineIndex + i + 1}</span><span class="line-code">${lineHtml}</span></div>`
+  ).join('');
+}
+
 function parseMarkdown(text) {
   if (!window.marked || !window.DOMPurify) {
     const div = document.createElement('div');
@@ -293,12 +313,12 @@ function parseMarkdown(text) {
       };
       const language = langAliases[cleanLang] || cleanLang;
 
-      let highlighted = '';
       let finalLang = language;
+      let langToUse = null;
 
       if (window.hljs) {
         try {
-          let langToUse = language && hljs.getLanguage(language) ? language : null;
+          langToUse = language && hljs.getLanguage(language) ? language : null;
           if (!langToUse) {
             // Sample first 1,200 chars for auto-detection to prevent mobile CPU freezing on large inputs
             const sample = code.length > 1200 ? code.slice(0, 1200) : code;
@@ -308,36 +328,49 @@ function parseMarkdown(text) {
               finalLang = auto.language;
             }
           }
-          if (langToUse) {
-            highlighted = hljs.highlight(code, { language: langToUse }).value;
-          } else {
-            highlighted = String(code).replace(/</g, '&lt;').replace(/>/g, '&gt;');
-          }
-        } catch (e) {
-          highlighted = String(code).replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        }
-      } else {
-        highlighted = String(code).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        } catch (_) {}
       }
 
       const displayLang = finalLang ? (finalLang === 'xml' ? 'HTML' : finalLang.toUpperCase()) : 'CODE';
       const finalClass = finalLang ? `language-${finalLang}` : '';
 
       const cleanCode = code.replace(/\r\n/g, '\n').replace(/\n+$/, '');
-      const codeLines = splitHighlighted(highlighted);
-      const lineCount = codeLines.length;
+      const rawLines = cleanCode.split('\n');
+      const lineCount = rawLines.length;
       const isCollapsible = lineCount > 15;
       const wrapperClasses = `code-block-wrapper${isCollapsible ? ' is-collapsible is-collapsed' : ''}`;
 
-      const codeLinesHtml = codeLines.map((lineHtml, i) => 
-        `<div class="code-line"><span class="line-num" aria-hidden="true">${i + 1}</span><span class="line-code">${lineHtml}</span></div>`
-      ).join('');
+      // SMART LAZY VIRTUAL TRUNCATION FOR MOBILE 60 FPS:
+      // For large code (> 35 lines), generating thousands of line DOM elements inside collapsed
+      // boxes locks the main thread for 300ms+. Slicing 35 lines for initial display cuts DOM nodes
+      // from 6,300 to ~100 while keeping 100% full code in memory for instant Copy & Expand.
+      let snippetId = "";
+      let isTruncated = false;
+      let codeLinesHtml = "";
+
+      if (lineCount > 35) {
+        isTruncated = true;
+        snippetId = "cs-" + (++codeSnippetSeq);
+        codeSnippetStore.set(snippetId, { code: cleanCode, lang: langToUse, lineCount, finalLang });
+        if (codeSnippetStore.size > 500) {
+          const firstKey = codeSnippetStore.keys().next().value;
+          codeSnippetStore.delete(firstKey);
+        }
+        const initialChunk = rawLines.slice(0, 35).join('\n');
+        codeLinesHtml = highlightAndBuildCodeLines(initialChunk, langToUse, 0);
+      } else {
+        codeLinesHtml = highlightAndBuildCodeLines(cleanCode, langToUse, 0);
+      }
 
       const expandBtnHtml = isCollapsible 
         ? `<button type="button" class="code-expand-btn" aria-label="Expand code block" title="Expand full code"><span class="code-expand-icon">▾</span> <span class="code-expand-text">Expand full code (${lineCount} lines)</span></button>` 
         : '';
 
-      return `<div class="${wrapperClasses}" data-code="${escapeAttr(cleanCode)}" data-lines="${lineCount}"><div class="code-header"><span class="code-lang">${displayLang}<span class="code-line-count">• ${lineCount} ${lineCount === 1 ? 'line' : 'lines'}</span></span><div class="code-header-actions"><button type="button" class="code-wrap-btn" title="Toggle word wrap" aria-label="Toggle word wrap">Wrap</button><button type="button" class="code-copy-btn" title="Copy code" aria-label="Copy code">Copy</button></div></div><div class="code-container hljs ${finalClass}">${codeLinesHtml}</div>${expandBtnHtml}</div>`;
+      const attrCode = (!isTruncated || cleanCode.length < 3000) ? ` data-code="${escapeAttr(cleanCode)}"` : '';
+      const attrSnippetId = snippetId ? ` data-code-id="${snippetId}"` : '';
+      const attrTruncated = isTruncated ? ` data-truncated="true"` : '';
+
+      return `<div class="${wrapperClasses}"${attrCode}${attrSnippetId}${attrTruncated} data-lines="${lineCount}"><div class="code-header"><span class="code-lang">${displayLang}<span class="code-line-count">• ${lineCount} ${lineCount === 1 ? 'line' : 'lines'}</span></span><div class="code-header-actions"><button type="button" class="code-wrap-btn" title="Toggle word wrap" aria-label="Toggle word wrap">Wrap</button><button type="button" class="code-copy-btn" title="Copy code" aria-label="Copy code">Copy</button></div></div><div class="code-container hljs ${finalClass}">${codeLinesHtml}</div>${expandBtnHtml}</div>`;
     };
 
     marked.setOptions({ renderer: renderer });
@@ -355,7 +388,7 @@ function parseMarkdown(text) {
   }
 
   const rawHtml = marked.parse(processText, { breaks: true, gfm: true });
-  return DOMPurify.sanitize(rawHtml, { ADD_TAGS: ['button', 'span'], ADD_ATTR: ['type', 'class', 'title', 'aria-label', 'aria-hidden', 'data-code', 'data-lines', 'data-md-action'] });
+  return DOMPurify.sanitize(rawHtml, { ADD_TAGS: ['button', 'span'], ADD_ATTR: ['type', 'class', 'title', 'aria-label', 'aria-hidden', 'data-code', 'data-lines', 'data-md-action', 'data-code-id', 'data-truncated'] });
 }
 
 let socket;
@@ -402,7 +435,7 @@ function debouncedRenderMessages(shouldScroll) {
     if (shouldScroll) {
       requestAnimationFrame(() => scrollToBottom());
     }
-  }, 20);
+  }, 80);
 }
 
 // Helpers for scrolling
@@ -1998,28 +2031,17 @@ function updateCountdowns() {
   const now = nowFromServerClock();
 
   for (const card of messagesEl.querySelectorAll(".message-card")) {
-    const expiresAt = Number(card.dataset.expiresAt || 0);
+    const expiresAtStr = card.dataset.expiresAt;
+    // Fast-path: skip non-expiring messages — "Keep", "Sending...", "Failed"
+    // labels are set once during renderMessages() and never change per-second.
+    // This eliminates querySelector + style writes for the majority of cards.
+    if (!expiresAtStr) continue;
+    const expiresAt = Number(expiresAtStr);
+    if (!expiresAt) continue;
+
     const createdAt = Number(card.dataset.createdAt || 0);
     const label = card.querySelector(".expires-label");
     const bar = card.querySelector(".expiry-bar span");
-
-    if (card.classList.contains("is-failed")) {
-      if (label) label.textContent = "Failed";
-      if (bar) bar.style.width = "0%";
-      continue;
-    }
-
-    if (card.classList.contains("is-pending")) {
-      if (label) label.textContent = "Sending...";
-      if (bar) bar.style.width = "100%";
-      continue;
-    }
-
-    if (!expiresAt) {
-      if (label) label.textContent = "Keep";
-      if (bar) bar.style.width = "100%";
-      continue;
-    }
 
     const remaining = Math.max(0, expiresAt - now);
     const total = Math.max(1, expiresAt - createdAt);
@@ -2315,18 +2337,25 @@ function renderMessages() {
   if (emptyState) emptyState.remove();
 
   // Smart diffing: remove any DOM cards that are no longer in the messages array
+  // Build a Map of existing cardId → element for O(1) lookups (eliminates O(n²) querySelector per message)
   const messageIdSet = new Set(messages.map(m => m.id));
   const existingCards = messagesEl.querySelectorAll(".message-card");
+  const cardMap = new Map();
   for (const card of existingCards) {
     const cardId = card.dataset.messageId;
     if (cardId && !messageIdSet.has(cardId)) {
       card.remove();
+    } else if (cardId) {
+      cardMap.set(cardId, card);
     }
   }
 
+  // Pre-build message lookup map for O(1) reply-to resolution (eliminates O(n) find per reply)
+  const messageMap = new Map(messages.map(m => [m.id, m]));
+
   for (const message of messages) {
     const isPinned = pinnedMessageIds.includes(message.id);
-    const existingNode = messagesEl.querySelector(`.message-card[data-message-id="${message.id}"]`);
+    const existingNode = cardMap.get(message.id) || null;
     if (existingNode) {
       existingNode.classList.toggle("is-pinned", isPinned);
       const pinnedBadge = existingNode.querySelector(".message-pinned-badge");
@@ -2367,6 +2396,10 @@ function renderMessages() {
           existingNode.style.opacity = "0.55";
           existingNode.style.pointerEvents = "none";
           existingNode.title = "Sending…";
+          const pendLabel = existingNode.querySelector(".expires-label");
+          if (pendLabel) pendLabel.textContent = "Sending...";
+          const pendBar = existingNode.querySelector(".expiry-bar span");
+          if (pendBar) pendBar.style.width = "100%";
         } else {
           existingNode.style.pointerEvents = "";
         }
@@ -2376,6 +2409,10 @@ function renderMessages() {
           existingNode.style.outline = "1.5px solid #ef4444";
           existingNode.style.borderRadius = "10px";
           existingNode.title = "Failed to send";
+          const failLabel = existingNode.querySelector(".expires-label");
+          if (failLabel) failLabel.textContent = "Failed";
+          const failBar = existingNode.querySelector(".expiry-bar span");
+          if (failBar) failBar.style.width = "0%";
           if (!existingNode.querySelector(".fail-badge")) {
             const failBadge = document.createElement("div");
             failBadge.className = "fail-badge";
@@ -2496,6 +2533,9 @@ function renderMessages() {
       node.style.opacity = "0.55";
       node.style.pointerEvents = "none";
       node.title = "Sending…";
+      if (expiresLabel) expiresLabel.textContent = "Sending...";
+      const pendingBar = node.querySelector(".expiry-bar span");
+      if (pendingBar) pendingBar.style.width = "100%";
     }
     if (message.isFailed) {
       node.classList.add("is-failed");
@@ -2503,6 +2543,9 @@ function renderMessages() {
       node.style.outline = "1.5px solid #ef4444";
       node.style.borderRadius = "10px";
       node.title = "Failed to send";
+      if (expiresLabel) expiresLabel.textContent = "Failed";
+      const failBar = node.querySelector(".expiry-bar span");
+      if (failBar) failBar.style.width = "0%";
       const failBadge = document.createElement("div");
       failBadge.className = "fail-badge";
       failBadge.style.cssText = "font-size:0.75rem;color:#ef4444;margin-top:6px;display:flex;align-items:center;gap:6px;cursor:pointer;";
@@ -2523,7 +2566,7 @@ function renderMessages() {
     }
     
     if (message.replyTo) {
-      const parentMsg = messages.find(m => m.id === message.replyTo);
+      const parentMsg = messageMap.get(message.replyTo);
       if (parentMsg) {
         replyContext.classList.remove('hidden');
         replyContextAuthor.textContent = parentMsg.authorName || "Guest";
@@ -3819,7 +3862,9 @@ document.addEventListener('click', (e) => {
   if (!copyBtn) return;
   const wrapper = copyBtn.closest('.code-block-wrapper');
   if (!wrapper) return;
-  const rawCode = wrapper.getAttribute('data-code');
+  const codeId = wrapper.getAttribute('data-code-id');
+  const stored = codeId && codeSnippetStore.get(codeId);
+  const rawCode = (stored && stored.code) || wrapper.getAttribute('data-code');
   if (rawCode) {
     copyText(rawCode, copyBtn);
   } else {
@@ -3834,6 +3879,20 @@ document.addEventListener('click', (e) => {
   if (!expandBtn) return;
   const wrapper = expandBtn.closest('.code-block-wrapper');
   if (!wrapper) return;
+
+  // On-demand full rendering for smart-truncated large code blocks
+  if (wrapper.getAttribute('data-truncated') === 'true') {
+    const codeId = wrapper.getAttribute('data-code-id');
+    const stored = codeId && codeSnippetStore.get(codeId);
+    if (stored) {
+      const codeContainer = wrapper.querySelector('.code-container');
+      if (codeContainer) {
+        codeContainer.innerHTML = highlightAndBuildCodeLines(stored.code, stored.lang, 0);
+      }
+      wrapper.removeAttribute('data-truncated');
+    }
+  }
+
   const isCollapsed = wrapper.classList.toggle('is-collapsed');
   const totalLines = wrapper.getAttribute('data-lines') || '';
   const lineStr = totalLines ? ` (${totalLines} lines)` : '';

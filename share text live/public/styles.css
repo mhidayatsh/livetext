@@ -4329,3 +4329,107 @@ textarea {
   color: var(--accent-strong);
 }
 
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE PERFORMANCE: Disable GPU-heavy backdrop-filter on mobile
+   backdrop-filter: blur() forces the GPU to rasterize and composite
+   underlying layers on EVERY scroll frame. On low-end mobile GPUs
+   this costs 20-30% frame budget per blurred layer. We replace
+   with higher-opacity solid backgrounds that look identical on
+   small screens but cost zero GPU compositing.
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 820px) {
+  /* ── Always-visible elements (highest impact) ── */
+  .topbar {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(26, 26, 36, 0.97);
+  }
+  .composer-panel {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(13, 13, 18, 0.97);
+  }
+  .pinned-banner {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(26, 26, 36, 0.97);
+  }
+
+  /* ── Menus & dropdowns ── */
+  .dropdown-menu {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(26, 26, 36, 0.98);
+  }
+
+  /* ── Overlays (temporary, but still save GPU when open) ── */
+  .sidebar-overlay {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  .lightbox {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  .modal-overlay {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(13, 13, 18, 0.92);
+  }
+  .drag-overlay {
+    backdrop-filter: none !important;
+  }
+  .delete-confirm-overlay {
+    backdrop-filter: none !important;
+  }
+  .image-overlay-btn {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(13, 13, 18, 0.85);
+  }
+  .broadcast-popup-content {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(26, 26, 36, 0.98);
+  }
+  .pw-modal-content {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(26, 26, 36, 0.98);
+  }
+  .notif-modal-content {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(26, 26, 36, 0.98);
+  }
+  .qr-scanner-status {
+    backdrop-filter: none !important;
+  }
+
+  /* ── Light theme equivalents ── */
+  [data-theme="light"] .topbar {
+    background: rgba(255, 255, 255, 0.97);
+  }
+  [data-theme="light"] .composer-panel {
+    background: rgba(255, 255, 255, 0.97);
+  }
+  [data-theme="light"] .pinned-banner {
+    background: rgba(255, 255, 255, 0.97);
+  }
+  [data-theme="light"] .dropdown-menu {
+    background: rgba(255, 255, 255, 0.98);
+  }
+  [data-theme="light"] .modal-overlay {
+    background: rgba(240, 240, 245, 0.92);
+  }
+  [data-theme="light"] .broadcast-popup-content {
+    background: rgba(255, 255, 255, 0.98);
+  }
+  [data-theme="light"] .pw-modal-content {
+    background: rgba(255, 255, 255, 0.98);
+  }
+  [data-theme="light"] .notif-modal-content {
+    background: rgba(255, 255, 255, 0.98);
+  }
+}
