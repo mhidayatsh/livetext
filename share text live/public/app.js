@@ -325,11 +325,19 @@ function parseMarkdown(text) {
 
       const cleanCode = code.replace(/\r\n/g, '\n').replace(/\n+$/, '');
       const codeLines = splitHighlighted(highlighted);
+      const lineCount = codeLines.length;
+      const isCollapsible = lineCount > 15;
+      const wrapperClasses = `code-block-wrapper${isCollapsible ? ' is-collapsible is-collapsed' : ''}`;
+
       const codeLinesHtml = codeLines.map((lineHtml, i) => 
         `<div class="code-line"><span class="line-num" aria-hidden="true">${i + 1}</span><span class="line-code">${lineHtml}</span></div>`
       ).join('');
 
-      return `<div class="code-block-wrapper" data-code="${escapeAttr(cleanCode)}"><div class="code-header"><span class="code-lang">${displayLang}</span><div class="code-header-actions"><button type="button" class="code-wrap-btn" title="Toggle word wrap" aria-label="Toggle word wrap">Wrap</button><button type="button" class="code-copy-btn" title="Copy code" aria-label="Copy code">Copy</button></div></div><div class="code-container hljs ${finalClass}">${codeLinesHtml}</div></div>`;
+      const expandBtnHtml = isCollapsible 
+        ? `<button type="button" class="code-expand-btn" aria-label="Expand code block" title="Expand full code"><span class="code-expand-icon">▾</span> <span class="code-expand-text">Expand full code (${lineCount} lines)</span></button>` 
+        : '';
+
+      return `<div class="${wrapperClasses}" data-code="${escapeAttr(cleanCode)}" data-lines="${lineCount}"><div class="code-header"><span class="code-lang">${displayLang}<span class="code-line-count">• ${lineCount} ${lineCount === 1 ? 'line' : 'lines'}</span></span><div class="code-header-actions"><button type="button" class="code-wrap-btn" title="Toggle word wrap" aria-label="Toggle word wrap">Wrap</button><button type="button" class="code-copy-btn" title="Copy code" aria-label="Copy code">Copy</button></div></div><div class="code-container hljs ${finalClass}">${codeLinesHtml}</div>${expandBtnHtml}</div>`;
     };
 
     marked.setOptions({ renderer: renderer });
@@ -347,7 +355,7 @@ function parseMarkdown(text) {
   }
 
   const rawHtml = marked.parse(processText, { breaks: true, gfm: true });
-  return DOMPurify.sanitize(rawHtml, { ADD_TAGS: ['button'], ADD_ATTR: ['type', 'class', 'title', 'aria-label', 'aria-hidden', 'data-code', 'data-md-action'] });
+  return DOMPurify.sanitize(rawHtml, { ADD_TAGS: ['button', 'span'], ADD_ATTR: ['type', 'class', 'title', 'aria-label', 'aria-hidden', 'data-code', 'data-lines', 'data-md-action'] });
 }
 
 let socket;
@@ -391,16 +399,20 @@ function debouncedRenderMessages(shouldScroll) {
   renderTimeout = setTimeout(() => {
     renderMessages();
     renderPinnedMessage();
-    if (shouldScroll) scrollToBottom();
+    if (shouldScroll) {
+      requestAnimationFrame(() => scrollToBottom());
+    }
   }, 20);
 }
 
 // Helpers for scrolling
 function scrollToBottom() {
   if (boardScrollArea) {
-    boardScrollArea.scrollTo({
-      top: boardScrollArea.scrollHeight,
-      behavior: 'smooth'
+    requestAnimationFrame(() => {
+      boardScrollArea.scrollTo({
+        top: boardScrollArea.scrollHeight,
+        behavior: 'smooth'
+      });
     });
   }
 }
@@ -1232,8 +1244,8 @@ function updateSendState() {
   if (attachPhotoBtn) attachPhotoBtn.disabled = false;
   const voiceBtn = document.getElementById("voice-note-btn");
   if (voiceBtn) voiceBtn.disabled = false;
-
-  shareButton.disabled = !isConnected || (!messageInput.value.trim() && !currentAttachment);
+  const hasText = /\S/.test(messageInput.value);
+  shareButton.disabled = !isConnected || (!hasText && !currentAttachment);
 }
 
 // Anti-Spam: Handle server mute notification with countdown
@@ -3582,9 +3594,15 @@ if (removeAttachmentBtn) {
 
 // Handle drop and paste globally for attachments
 document.addEventListener("paste", async (e) => {
-  const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-  for (let index in items) {
-    const item = items[index];
+  const clipboardData = e.clipboardData || (e.originalEvent && e.originalEvent.clipboardData);
+  if (!clipboardData) return;
+  // If clipboard does not contain files, exit immediately without inspecting items
+  if (clipboardData.types && !clipboardData.types.includes('Files')) return;
+
+  const items = clipboardData.items;
+  if (!items) return;
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
     if (item.kind === 'file') {
       if (isUserMuted()) {
         const remaining = Math.ceil((window._mutedUntil - Date.now()) / 1000);
@@ -3592,8 +3610,10 @@ document.addEventListener("paste", async (e) => {
         return;
       }
       const blob = item.getAsFile();
-      await processFile(blob);
-      return;
+      if (blob) {
+        await processFile(blob);
+        return;
+      }
     }
   }
 });
@@ -3805,6 +3825,34 @@ document.addEventListener('click', (e) => {
   } else {
     const codeEl = wrapper.querySelector('.code-container') || wrapper.querySelector('code');
     if (codeEl) copyText(codeEl.textContent, copyBtn);
+  }
+});
+
+// Delegate click for code block expand/collapse buttons
+document.addEventListener('click', (e) => {
+  const expandBtn = e.target.closest('.code-expand-btn');
+  if (!expandBtn) return;
+  const wrapper = expandBtn.closest('.code-block-wrapper');
+  if (!wrapper) return;
+  const isCollapsed = wrapper.classList.toggle('is-collapsed');
+  const totalLines = wrapper.getAttribute('data-lines') || '';
+  const lineStr = totalLines ? ` (${totalLines} lines)` : '';
+  const iconSpan = expandBtn.querySelector('.code-expand-icon');
+  const textSpan = expandBtn.querySelector('.code-expand-text');
+
+  if (isCollapsed) {
+    if (iconSpan) iconSpan.textContent = '▾';
+    if (textSpan) textSpan.textContent = `Expand full code${lineStr}`;
+    expandBtn.setAttribute('title', 'Expand full code');
+    expandBtn.setAttribute('aria-label', 'Expand full code');
+    try {
+      wrapper.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } catch (_) {}
+  } else {
+    if (iconSpan) iconSpan.textContent = '▴';
+    if (textSpan) textSpan.textContent = 'Collapse code';
+    expandBtn.setAttribute('title', 'Collapse code');
+    expandBtn.setAttribute('aria-label', 'Collapse code');
   }
 });
 
@@ -4292,15 +4340,29 @@ nameInput.addEventListener("keydown", (event) => {
 });
 
 messageInput.addEventListener("input", () => {
-  // Safe auto-resize: clamp height to 120px to prevent mobile GPU canvas/texture blowup & crash
-  messageInput.style.height = 'auto';
-  const maxHeight = 120;
-  const targetHeight = Math.min(messageInput.scrollHeight, maxHeight);
-  messageInput.style.height = (targetHeight > 0 ? targetHeight : 40) + 'px';
-  messageInput.style.overflowY = messageInput.scrollHeight > maxHeight ? 'auto' : 'hidden';
-  
-  charCount.textContent = `${messageInput.value.length}/50000`;
+  const len = messageInput.value.length;
+  charCount.textContent = `${len}/50000`;
   updateSendState();
+
+  // Fast-path for large paste / long code (> 250 chars):
+  // When pasting code or large text, it will guaranteed exceed 120px max height.
+  // Bypassing `style.height = 'auto'` and `scrollHeight` eliminates the massive
+  // synchronous text-reflow layout computation of thousands of lines on mobile phones!
+  const maxHeight = 120;
+  if (len > 250) {
+    if (messageInput.style.height !== '120px') {
+      messageInput.style.height = '120px';
+    }
+    if (messageInput.style.overflowY !== 'auto') {
+      messageInput.style.overflowY = 'auto';
+    }
+  } else {
+    messageInput.style.height = 'auto';
+    const targetHeight = Math.min(messageInput.scrollHeight, maxHeight);
+    messageInput.style.height = (targetHeight > 0 ? targetHeight : 40) + 'px';
+    messageInput.style.overflowY = messageInput.scrollHeight > maxHeight ? 'auto' : 'hidden';
+  }
+
   saveDraftSoon();
   sendTypingSoon();
 });

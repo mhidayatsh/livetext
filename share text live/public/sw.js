@@ -1,9 +1,9 @@
-const CACHE_NAME = 'shareli-cache-v53';
+const CACHE_NAME = 'shareli-cache-v56';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
-  '/styles.css?v=53',
-  '/app.js?v=53',
+  '/styles.css?v=56',
+  '/app.js?v=56',
   '/styles.css',
   '/app.js',
   '/manifest.json',
