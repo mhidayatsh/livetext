@@ -117,6 +117,9 @@ if (lightbox) {
 function detectCodeLanguage(text) {
   if (!text || typeof text !== 'string') return null;
 
+  // Sample first 2,500 chars to avoid regex catastrophic backtracking / mobile UI freezing on large text
+  const sample = text.length > 2500 ? text.slice(0, 2500) : text;
+
   // 1. JavaScript / TypeScript (check before Python to disambiguate ES6 imports)
   const jsPatterns = [
     /(?:^|\n)\s*(?:const|let|var)\s+[a-zA-Z_$]\w*\s*=/,
@@ -127,9 +130,17 @@ function detectCodeLanguage(text) {
     /(?:^|\n)\s*(?:interface|type)\s+[A-Z]\w*\s*(?:=|\{)/,
     /(?:^|\n)\s*=>\s*\{?/
   ];
-  if (jsPatterns.some(p => p.test(text))) return 'javascript';
+  if (jsPatterns.some(p => p.test(sample))) return 'javascript';
 
-  // 2. Python patterns
+  // 2. Dart / Flutter patterns (check before Python because Dart uses @override annotations)
+  const dartPatterns = [
+    /import\s+['"]package:flutter\//,
+    /import\s+['"]package:[a-zA-Z0-9_]+\/[a-zA-Z0-9_.]+\.dart['"]/,
+    /\b(?:StatelessWidget|StatefulWidget|BuildContext|Widget\s+build|runApp|setState\s*\()/
+  ];
+  if (dartPatterns.some(p => p.test(sample))) return 'dart';
+
+  // 3. Python patterns
   const pythonPatterns = [
     /(?:^|\n)\s*(?:import\s+[a-zA-Z0-9_.]+(?:\s*,\s*[a-zA-Z0-9_.]+)*(?:\s+as\s+[a-zA-Z0-9_]+)?|from\s+[a-zA-Z0-9_.]+\s+import)/,
     /(?:^|\n)\s*(?:async\s+)?def\s+[a-zA-Z_]\w*\s*\([^)]*\)\s*(?:->\s*[^:]+)?\s*:/,
@@ -144,23 +155,23 @@ function detectCodeLanguage(text) {
     /(?:^|\n)\s*with\s+.*(?:\s+as\s+\w+)?\s*:\s*$/m,
     /(?:^|\n)\s*lambda\s+[^:]+:/
   ];
-  if (pythonPatterns.some(p => p.test(text))) return 'python';
+  if (pythonPatterns.some(p => p.test(sample))) return 'python';
 
   // 3. HTML / XML
-  if (/^\s*<!DOCTYPE\s+html>/i.test(text) || /^\s*<(?:html|head|body|div|span|p|a|ul|ol|li|table|form|button|input|script|style)[\s>]/i.test(text)) {
+  if (/^\s*<!DOCTYPE\s+html>/i.test(sample) || /^\s*<(?:html|head|body|div|span|p|a|ul|ol|li|table|form|button|input|script|style)[\s>]/i.test(sample)) {
     return 'html';
   }
 
   // 4. PHP
-  if (/^\s*<\?php/i.test(text)) return 'php';
+  if (/^\s*<\?php/i.test(sample)) return 'php';
 
   // 5. C / C++
-  if (/(?:^|\n)\s*#include\s+[<"][a-zA-Z0-9_./]+[>"]/.test(text) || /(?:^|\n)\s*(?:int|void)\s+main\s*\([^)]*\)\s*\{/.test(text)) {
+  if (/(?:^|\n)\s*#include\s+[<"][a-zA-Z0-9_./]+[>"]/.test(sample) || /(?:^|\n)\s*(?:int|void)\s+main\s*\([^)]*\)\s*\{/.test(sample)) {
     return 'cpp';
   }
 
   // 6. SQL
-  if (/(?:^|\n)\s*(?:SELECT\s+[\s\S]+?\s+FROM|INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|CREATE\s+TABLE|ALTER\s+TABLE|DROP\s+TABLE)\b/i.test(text)) {
+  if (/(?:^|\n)\s*(?:SELECT\s+[\s\S]+?\s+FROM|INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|CREATE\s+TABLE|ALTER\s+TABLE|DROP\s+TABLE)\b/i.test(sample)) {
     return 'sql';
   }
 
@@ -170,32 +181,32 @@ function detectCodeLanguage(text) {
     /(?:^|\n)\s*(?:npm\s+(?:run|install|i|test|build)|yarn\s+|pnpm\s+|pip\s+install|cargo\s+|git\s+[a-z]+|docker\s+[a-z]+|kubectl\s+|curl\s+-|wget\s+)/,
     /(?:^|\n)\s*(?:echo\s+["']|export\s+[A-Z_]+=)/
   ];
-  if (bashPatterns.some(p => p.test(text))) return 'bash';
+  if (bashPatterns.some(p => p.test(sample))) return 'bash';
 
   // 8. JSON
-  if (/^\s*[\{\[][\s\S]*["'][a-zA-Z0-9_-]+["']\s*:\s*[\s\S]*[\}\]]\s*$/.test(text.trim())) {
+  if (/^\s*[\{\[][\s\S]*["'][a-zA-Z0-9_-]+["']\s*:\s*[\s\S]*[\}\]]\s*$/.test(sample.trim())) {
     return 'json';
   }
 
   // 9. Go
-  if (/(?:^|\n)\s*package\s+[a-z0-9_]+/.test(text) || /(?:^|\n)\s*func\s+(?:\([^)]+\)\s+)?[a-zA-Z_]\w*\s*\(/.test(text)) {
+  if (/(?:^|\n)\s*package\s+[a-z0-9_]+/.test(sample) || /(?:^|\n)\s*func\s+(?:\([^)]+\)\s+)?[a-zA-Z_]\w*\s*\(/.test(sample)) {
     return 'go';
   }
 
   // 10. Rust
-  if (/(?:^|\n)\s*(?:fn\s+main|pub\s+fn|let\s+mut|impl\b|use\s+std::)/.test(text)) {
+  if (/(?:^|\n)\s*(?:fn\s+main|pub\s+fn|let\s+mut|impl\b|use\s+std::)/.test(sample)) {
     return 'rust';
   }
 
   // 11. CSS
-  if (/(?:^|\n)\s*(?:[.#]?[a-zA-Z0-9_:-]+|\*)\s*\{\s*[\n\r]\s*[a-zA-Z-]+:\s*[^;]+;/.test(text)) {
+  if (/(?:^|\n)\s*(?:[.#]?[a-zA-Z0-9_:-]+|\*)\s*\{\s*[\n\r]\s*[a-zA-Z-]+:\s*[^;]+;/.test(sample)) {
     return 'css';
   }
 
   // Fallback: character density heuristic for other languages
-  if (text.split('\n').length >= 2) {
-    const specialChars = (text.match(/[{}[\]();=<>]/g) || []).length;
-    if (specialChars / text.length > 0.05) {
+  if (sample.split('\n').length >= 2) {
+    const specialChars = (sample.match(/[{}[\]();=<>]/g) || []).length;
+    if (specialChars / sample.length > 0.05) {
       return ''; // generic code block (will use highlightAuto)
     }
   }
@@ -276,7 +287,9 @@ function parseMarkdown(text) {
         hpp: 'cpp',
         html: 'xml',
         htm: 'xml',
-        md: 'markdown'
+        md: 'markdown',
+        dart: 'dart',
+        flutter: 'dart'
       };
       const language = langAliases[cleanLang] || cleanLang;
 
@@ -285,14 +298,20 @@ function parseMarkdown(text) {
 
       if (window.hljs) {
         try {
-          if (language && hljs.getLanguage(language)) {
-            highlighted = hljs.highlight(code, { language: language }).value;
-          } else {
-            const auto = hljs.highlightAuto(code);
-            highlighted = auto.value;
-            if (auto.language) {
+          let langToUse = language && hljs.getLanguage(language) ? language : null;
+          if (!langToUse) {
+            // Sample first 1,200 chars for auto-detection to prevent mobile CPU freezing on large inputs
+            const sample = code.length > 1200 ? code.slice(0, 1200) : code;
+            const auto = hljs.highlightAuto(sample);
+            if (auto.language && hljs.getLanguage(auto.language)) {
+              langToUse = auto.language;
               finalLang = auto.language;
             }
+          }
+          if (langToUse) {
+            highlighted = hljs.highlight(code, { language: langToUse }).value;
+          } else {
+            highlighted = String(code).replace(/</g, '&lt;').replace(/>/g, '&gt;');
           }
         } catch (e) {
           highlighted = String(code).replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -1429,13 +1448,18 @@ function getDraftKey() {
 
 function saveDraft() {
   const value = messageInput.value;
-
-  if (currentRoomId !== 'public' || !value.trim()) {
-    localStorage.removeItem(getDraftKey());
-    draftStatus.textContent = "Draft ready";
-  } else {
-    localStorage.setItem(getDraftKey(), value);
-    draftStatus.textContent = "Draft saved";
+  try {
+    if (currentRoomId !== 'public' || !value.trim()) {
+      localStorage.removeItem(getDraftKey());
+      if (draftStatus && draftStatus.textContent) draftStatus.textContent = "Draft ready";
+    } else {
+      // Limit saved draft to 15,000 characters to prevent mobile LocalStorage quota crashes
+      const toSave = value.length > 15000 ? value.slice(0, 15000) : value;
+      localStorage.setItem(getDraftKey(), toSave);
+      if (draftStatus && draftStatus.textContent) draftStatus.textContent = "Draft saved";
+    }
+  } catch (err) {
+    // Silently ignore quota exceeded errors on mobile
   }
 }
 
@@ -3082,7 +3106,7 @@ function renderTypingDrafts() {
     const text = document.createElement("p");
 
     heading.textContent = `${draft.authorName || "Guest"} is typing...`;
-    text.innerHTML = parseMarkdown(draft.text);
+    text.textContent = draft.text ? draft.text.slice(0, 150) : "";
 
     body.append(heading, text);
     item.append(avatar, body);
@@ -3091,9 +3115,8 @@ function renderTypingDrafts() {
 }
 
 function updateOwnLivePreview() {
-  const text = messageInput.value.trim();
-  livePreview.hidden = !text;
-  livePreviewText.innerHTML = parseMarkdown(text);
+  // Obsolete live preview kept hidden to prevent main-thread freeze and mobile GPU texture crashes on large paste
+  if (livePreview) livePreview.hidden = true;
 }
 
 let lastTypingSentText = "";
@@ -3103,11 +3126,13 @@ async function sendTypingSoon() {
   clearTimeout(typingTimer);
   const text = messageInput.value;
   typingTimer = setTimeout(async () => {
-    if (text === lastTypingSentText && Date.now() - lastTypingSentTime < 2000) return;
-    lastTypingSentText = text;
+    // Cap typing preview snippet to 150 chars to avoid encrypting/broadcasting 50KB code blocks
+    const snippet = text.slice(0, 150);
+    if (snippet === lastTypingSentText && Date.now() - lastTypingSentTime < 2000) return;
+    lastTypingSentText = snippet;
     lastTypingSentTime = Date.now();
-    send({ type: "typing", text: await encryptText(text) });
-  }, 250);
+    send({ type: "typing", text: await encryptText(snippet) });
+  }, 300);
 }
 
 function renderPeople(users, count) {
@@ -4267,15 +4292,14 @@ nameInput.addEventListener("keydown", (event) => {
 });
 
 messageInput.addEventListener("input", () => {
-  // Auto-resize textarea
+  // Safe auto-resize: clamp height to 120px to prevent mobile GPU canvas/texture blowup & crash
   messageInput.style.height = 'auto';
-  messageInput.style.height = (messageInput.scrollHeight) + 'px';
-  if (messageInput.value === "") {
-    messageInput.style.height = 'auto';
-  }
+  const maxHeight = 120;
+  const targetHeight = Math.min(messageInput.scrollHeight, maxHeight);
+  messageInput.style.height = (targetHeight > 0 ? targetHeight : 40) + 'px';
+  messageInput.style.overflowY = messageInput.scrollHeight > maxHeight ? 'auto' : 'hidden';
   
   charCount.textContent = `${messageInput.value.length}/50000`;
-  updateOwnLivePreview();
   updateSendState();
   saveDraftSoon();
   sendTypingSoon();
