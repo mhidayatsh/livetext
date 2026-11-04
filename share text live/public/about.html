@@ -3,14 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="About Shareli — a free, open-source encrypted tool for sharing text, code, files & voice notes between devices. No sign-up, no tracking, built for privacy." />
+    <meta name="description" content="About Shareli — the free, zero-login tool to share text, share files, code snippets & voice notes live across devices. End-to-end encrypted, zero data retention." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://shareli.online/about.html" />
-    <meta property="og:title" content="About Shareli — Free Encrypted Text & File Sharing Tool" />
-    <meta property="og:description" content="Learn about Shareli's mission: instant, private, open-source text and file sharing with end-to-end encryption. No account, no data retention." />
+    <meta property="og:title" content="About Shareli — Free Live Text & File Sharing Tool | No Sign-Up" />
+    <meta property="og:description" content="Discover how Shareli enables instant, end-to-end encrypted text sharing and file transfer across devices with zero login and no permanent database." />
     <meta property="og:url" content="https://shareli.online/about.html" />
     <meta property="og:type" content="website" />
-    <title>About Shareli — Free Open-Source Encrypted Text & File Sharing Tool</title>
+    <title>About Shareli — Free Live Text & File Sharing Tool | No Sign-Up</title>
     <link rel="stylesheet" href="styles.css" />
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png" />
@@ -81,6 +81,15 @@
         <li>Send a message in a private room and inspect the transmitted frames. You will observe that only raw AES-GCM ciphertext is transmitted over the wire — plaintext never leaves your device.</li>
         <li>Inspect the URL: notice that the encryption key is isolated in the URL hash fragment (<code>#key=...</code>), mathematically proving it is never sent to the server per RFC 3986.</li>
       </ol>
+
+      <h2>Core Capabilities: Share Text &amp; Share Files Online</h2>
+      <p>Shareli is engineered specifically to eliminate friction from two everyday tasks: <strong>sharing text online</strong> and <strong>sharing files online</strong> across different devices.</p>
+
+      <h3>1. Instant Live Text Sharing</h3>
+      <p>Need to copy a 2FA code, WiFi key, link, or terminal command from your smartphone to your laptop? Traditional methods force you to draft an email, send a self-DM in Slack, or open a clunky cloud note. Shareli provides an interactive, real-time shared clipboard wall. As you type, your text syncs instantaneously via low-latency WebSockets with live typing indicators. Format code with Markdown and syntax highlighting across 190+ languages, or assign a self-destruct timer so your text vanishes without a trace. <a href="/blog/share-text-online-instantly.html">Read our complete guide to sharing text online →</a></p>
+
+      <h3>2. Zero-Login File &amp; Image Sharing</h3>
+      <p>Cloud storage platforms require accounts, email verification, permission toggles, and permanent disk quotas. Shareli lets you drag and drop images, PDFs, ZIP archives, and documents up to 5MB directly into your browser window. You can upload multiple files at once, preview images in an interactive lightbox, and pair devices in under two seconds via built-in QR code scanning. Files are encrypted client-side and held exclusively in volatile RAM until their timer expires. <a href="/blog/share-files-online-without-login.html">Read our complete guide to sharing files without login →</a></p>
 
       <h2>Every Feature, Built In</h2>
       <div class="feature-grid">
@@ -165,6 +174,10 @@
           <p>Export entire room history as a .txt file.</p>
         </div>
       </div>
+
+      <p style="text-align: center; margin: 20px 0 36px; font-weight: 500;">
+        💡 <em>Want a complete technical deep-dive into every capability? Read our <a href="/blog/shareli-features-guide.html">Shareli Features Master Guide →</a></em>
+      </p>
 
       <h2>Why No Database? By Design.</h2>
       <p>Most messaging platforms store your conversations in a database — sometimes indefinitely. Shareli takes a fundamentally different approach:</p>
